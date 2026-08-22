@@ -152,7 +152,21 @@ button:disabled {
   gap: 0.65rem;
 }
 
-.links code {
+.link-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+}
+
+.link-row strong {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.feed-link {
   display: block;
   word-break: break-all;
   background: rgba(255, 255, 255, 0.7);
@@ -160,6 +174,33 @@ button:disabled {
   border-radius: 8px;
   padding: 0.75rem 0.9rem;
   font-size: 0.9rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--accent-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+button.copy {
+  background: transparent;
+  color: var(--accent-deep);
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+button.copy:hover {
+  background: rgba(13, 110, 90, 0.08);
+}
+
+@media (max-width: 560px) {
+  .link-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .link-row strong {
+    grid-column: 1 / -1;
+  }
 }
 
 .meta {

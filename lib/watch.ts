@@ -158,18 +158,40 @@ export async function watchUrl(
     return { watch: refreshed, urls: feedPaths(refreshed.id, origin) };
   }
 
+  // Fetch before free-tier gate so dead hosts return a fetch error, not the 1-watch cap.
+  const now = opts.now ?? new Date();
+  const fetched = await fetchSource(normalized, opts.fetcher);
+
   const gate = await canCreateWatch(normalized, opts.dataPath);
   if (!gate.ok) {
-    const err = new Error(gate.reason) as Error & { status?: number; existing?: WatchRecord };
+    const err = new Error(gate.reason) as Error & {
+      status?: number;
+      existing?: WatchRecord;
+    };
     err.status = 403;
     err.existing = gate.existing;
     throw err;
   }
 
-  const now = opts.now ?? new Date();
   const id = watchIdFromSourceUrl(normalized);
-  await saveWatch(stubWatch(id, normalized, now), opts.dataPath);
-  const watch = await refreshWatch(id, { ...opts, force: true, now });
+  const sourceHash = hashContent(fetched.text);
+  const { title, events } = parseSourceText(fetched.text, now);
+  const calName = fetched.title || title || "WatchCal";
+  const ics = eventsToIcs(id, calName, events, now, normalized);
+  const watch = await saveWatch(
+    {
+      id,
+      sourceUrl: normalized,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      lastFetchedAt: now.toISOString(),
+      sourceHash,
+      title: calName,
+      events,
+      ics,
+    },
+    opts.dataPath
+  );
   return { watch, urls: feedPaths(watch.id, origin) };
 }
 

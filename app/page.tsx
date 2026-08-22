@@ -17,12 +17,14 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [watch, setWatch] = useState<WatchPayload | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     setWatch(null);
+    setCopied(null);
     try {
       const res = await fetch("/api/watches", {
         method: "POST",
@@ -50,10 +52,24 @@ export default function HomePage() {
         return;
       }
       setWatch(data.payload);
+      if (data.payload.event_count === 0) {
+        setError(
+          "No dated events found on that page. Feeds only include lines with a real calendar date (day, month, and year)."
+        );
+      }
     } catch {
       setError("Could not create watch");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function copyLink(value: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(key);
+    } catch {
+      setCopied(null);
     }
   }
 
@@ -93,13 +109,31 @@ export default function HomePage() {
             URL updates when the source page changes.
           </p>
           <div className="links">
-            <div>
+            <div className="link-row">
               <strong>webcal</strong>
-              <code>{watch.webcal_url}</code>
+              <a className="feed-link" href={watch.webcal_url}>
+                {watch.webcal_url}
+              </a>
+              <button
+                type="button"
+                className="copy"
+                onClick={() => copyLink(watch.webcal_url, "webcal")}
+              >
+                {copied === "webcal" ? "Copied" : "Copy"}
+              </button>
             </div>
-            <div>
+            <div className="link-row">
               <strong>https .ics</strong>
-              <code>{watch.https_url}</code>
+              <a className="feed-link" href={watch.https_url}>
+                {watch.https_url}
+              </a>
+              <button
+                type="button"
+                className="copy"
+                onClick={() => copyLink(watch.https_url, "https")}
+              >
+                {copied === "https" ? "Copied" : "Copy"}
+              </button>
             </div>
             <div>
               <a href={watch.download_url}>Download one-shot .ics</a>
@@ -113,9 +147,9 @@ export default function HomePage() {
       )}
 
       <p className="note">
-        Free path: one watch, no login, not billed SaaS. Refresh happens when
-        calendars poll the feed (and via optional cron). Not a paste-box demo —
-        the product is the hosted poll URL.
+        Free path: <strong>1 free watch</strong>, no login, not billed SaaS.
+        Refresh happens when calendars poll the feed (and via optional daily
+        cron). Not a paste-box demo — the product is the hosted poll URL.
       </p>
     </main>
   );
