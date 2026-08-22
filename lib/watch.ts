@@ -7,10 +7,13 @@
  *
  * Refresh policy: on-read (feed GET) re-fetches when stale, plus optional
  * /api/cron and /api/refresh/[id]. Documented in README.
+ *
+ * Watch ids are base64url(sourceUrl). After a Vercel cold start empties /tmp,
+ * feed GET / refresh decode the id and rebuild — no Blob/KV required.
  */
 
 import { eventsToIcs } from "./ics";
-import { fetchSource } from "./fetchSource";
+import { assertPublicHttpUrl, fetchSource } from "./fetchSource";
 import { parseSourceText } from "./parseSource";
 import {
   canCreateWatch,
@@ -18,8 +21,9 @@ import {
   getWatch,
   hashContent,
   listWatches,
-  newWatchId,
   saveWatch,
+  sourceUrlFromWatchId,
+  watchIdFromSourceUrl,
 } from "./store";
 import type { WatchRecord } from "./types";
 
@@ -53,6 +57,50 @@ function isStale(watch: WatchRecord, now: Date): boolean {
   return now.getTime() - last >= REFRESH_INTERVAL_MS;
 }
 
+function stubWatch(id: string, sourceUrl: string, now: Date): WatchRecord {
+  return {
+    id,
+    sourceUrl,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    lastFetchedAt: null,
+    sourceHash: null,
+    title: "WatchCal",
+    events: [],
+    ics: eventsToIcs(id, "WatchCal", [], now, sourceUrl),
+  };
+}
+
+/**
+ * Load watch from cache, or rebuild from deterministic id (encoded source URL).
+ */
+export async function loadOrRebuildWatch(
+  id: string,
+  opts: {
+    dataPath?: string;
+    now?: Date;
+  } = {}
+): Promise<WatchRecord> {
+  const cleanId = id.replace(/\.ics$/i, "");
+  const existing = await getWatch(cleanId, opts.dataPath);
+  if (existing) return existing;
+
+  const sourceUrl = sourceUrlFromWatchId(cleanId);
+  if (!sourceUrl) throw new Error("Watch not found");
+  try {
+    assertPublicHttpUrl(sourceUrl);
+  } catch {
+    throw new Error("Watch not found");
+  }
+
+  const now = opts.now ?? new Date();
+  const expectedId = watchIdFromSourceUrl(sourceUrl);
+  if (expectedId !== cleanId) throw new Error("Watch not found");
+
+  const stub = stubWatch(cleanId, sourceUrl, now);
+  return saveWatch(stub, opts.dataPath);
+}
+
 export async function refreshWatch(
   id: string,
   opts: {
@@ -63,8 +111,11 @@ export async function refreshWatch(
   } = {}
 ): Promise<WatchRecord> {
   const now = opts.now ?? new Date();
-  const watch = await getWatch(id, opts.dataPath);
-  if (!watch) throw new Error("Watch not found");
+  const cleanId = id.replace(/\.ics$/i, "");
+  const watch = await loadOrRebuildWatch(cleanId, {
+    dataPath: opts.dataPath,
+    now,
+  });
   if (!opts.force && !isStale(watch, now)) return watch;
 
   const fetched = await fetchSource(watch.sourceUrl, opts.fetcher);
@@ -97,7 +148,8 @@ export async function watchUrl(
     now?: Date;
   } = {}
 ): Promise<{ watch: WatchRecord; urls: WatchUrls }> {
-  const existing = await findWatchBySourceUrl(sourceUrl, opts.dataPath);
+  const normalized = assertPublicHttpUrl(sourceUrl).toString();
+  const existing = await findWatchBySourceUrl(normalized, opts.dataPath);
   if (existing) {
     const refreshed = await refreshWatch(existing.id, {
       ...opts,
@@ -106,7 +158,7 @@ export async function watchUrl(
     return { watch: refreshed, urls: feedPaths(refreshed.id, origin) };
   }
 
-  const gate = await canCreateWatch(sourceUrl, opts.dataPath);
+  const gate = await canCreateWatch(normalized, opts.dataPath);
   if (!gate.ok) {
     const err = new Error(gate.reason) as Error & { status?: number; existing?: WatchRecord };
     err.status = 403;
@@ -115,19 +167,8 @@ export async function watchUrl(
   }
 
   const now = opts.now ?? new Date();
-  const id = newWatchId();
-  const stub: WatchRecord = {
-    id,
-    sourceUrl,
-    createdAt: now.toISOString(),
-    updatedAt: now.toISOString(),
-    lastFetchedAt: null,
-    sourceHash: null,
-    title: "WatchCal",
-    events: [],
-    ics: eventsToIcs(id, "WatchCal", [], now, sourceUrl),
-  };
-  await saveWatch(stub, opts.dataPath);
+  const id = watchIdFromSourceUrl(normalized);
+  await saveWatch(stubWatch(id, normalized, now), opts.dataPath);
   const watch = await refreshWatch(id, { ...opts, force: true, now });
   return { watch, urls: feedPaths(watch.id, origin) };
 }
@@ -141,10 +182,12 @@ export async function getFeedIcs(
     refresh?: boolean;
   } = {}
 ): Promise<string> {
-  // Strip optional .ics suffix from id
   const cleanId = id.replace(/\.ics$/i, "");
-  let watch = await getWatch(cleanId, opts.dataPath);
-  if (!watch) throw new Error("Watch not found");
+  // Rebuild from encoded URL if /tmp (or local) cache is empty — cold start safe
+  let watch = await loadOrRebuildWatch(cleanId, {
+    dataPath: opts.dataPath,
+    now: opts.now,
+  });
 
   if (opts.refresh !== false) {
     try {
