@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { eventUid, eventsToIcs, isValidVCalendar } from "./ics";
 import { htmlToText, parseSourceText } from "./parseSource";
-import { FREE_WATCH_LIMIT, getWatch } from "./store";
+import {
+  FREE_WATCH_LIMIT,
+  getWatch,
+  sourceUrlFromWatchId,
+  watchIdFromSourceUrl,
+} from "./store";
 import { feedPaths, getFeedIcs, refreshWatch, watchUrl } from "./watch";
 import type { ParsedEvent } from "./types";
 
@@ -58,6 +63,16 @@ describe("parseSource", () => {
   });
 });
 
+describe("deterministic watch ids", () => {
+  it("round-trips source URL through the id", () => {
+    const url = "https://example.com/terms?year=2026";
+    const id = watchIdFromSourceUrl(url);
+    assert.equal(watchIdFromSourceUrl(url), id);
+    assert.equal(sourceUrlFromWatchId(id), new URL(url).toString());
+    assert.equal(sourceUrlFromWatchId(id + ".ics"), new URL(url).toString());
+  });
+});
+
 describe("watch feed lifecycle", { concurrency: false }, () => {
   let dataPath = "";
   let sourceBody = "";
@@ -80,13 +95,15 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
   it("creates a watch with stable feed path and updates ICS when source changes", async () => {
     sourceBody = `<html><title>Terms v1</title><body><p>Term A 10 April 2026</p></body></html>`;
     const origin = "https://watchcal.example";
-    const { watch, urls } = await watchUrl("https://example.com/terms", origin, {
+    const sourceUrl = "https://example.com/terms";
+    const { watch, urls } = await watchUrl(sourceUrl, origin, {
       dataPath,
       fetcher,
       now: new Date("2026-01-05T00:00:00Z"),
     });
 
     assert.equal(FREE_WATCH_LIMIT, 1);
+    assert.equal(watch.id, watchIdFromSourceUrl(sourceUrl));
     assert.equal(urls.https_url, `${origin}/api/feed/${watch.id}.ics`);
     assert.equal(urls.webcal_url, `webcal://watchcal.example/api/feed/${watch.id}.ics`);
     assert.equal(feedPaths(watch.id, origin).https_url, urls.https_url);
@@ -105,7 +122,7 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
     const hash1 = stored!.sourceHash;
 
     // Same URL again returns the same watch id (stable feed path)
-    const again = await watchUrl("https://example.com/terms", origin, {
+    const again = await watchUrl(sourceUrl, origin, {
       dataPath,
       fetcher,
       now: new Date("2026-01-05T00:02:00Z"),
@@ -124,6 +141,30 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
     assert.ok(refreshed.events.length >= 1);
     assert.match(refreshed.ics, /Term B|May 2026|12 May/);
     assert.doesNotMatch(refreshed.ics, /Term A 10 April/);
+  });
+
+  it("serves text/calendar after the store is wiped (cold start)", async () => {
+    sourceBody = `<html><title>Cold</title><body><p>Match day 18 June 2026</p></body></html>`;
+    const sourceUrl = "https://example.com/terms";
+    const id = watchIdFromSourceUrl(sourceUrl);
+
+    // Simulate Vercel cold start: empty /tmp cache
+    await writeFile(dataPath, JSON.stringify({ watches: [] }) + "\n", "utf8");
+    assert.equal(await getWatch(id, dataPath), null);
+
+    const ics = await getFeedIcs(id, {
+      dataPath,
+      fetcher,
+      now: new Date("2026-01-07T00:00:00Z"),
+    });
+    assert.equal(isValidVCalendar(ics), true);
+    assert.match(ics, /Match day|18 June|June 2026/);
+    assert.match(ics, /BEGIN:VCALENDAR/);
+
+    // Cache repopulated from decoded id
+    const restored = await getWatch(id, dataPath);
+    assert.ok(restored);
+    assert.equal(restored!.sourceUrl, new URL(sourceUrl).toString());
   });
 
   it("enforces the free one-watch limit for a different URL", async () => {

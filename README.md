@@ -20,9 +20,9 @@ Calendars poll on their own schedule. WatchCal refreshes the source when the fee
 **Primary: on-read refresh.**  
 `GET /api/feed/{id}.ics` re-fetches the source when the watch is stale (default 15 minutes, override with `WATCHCAL_REFRESH_MS`). The feed URL stays stable; the `VCALENDAR` body changes when the source changes.
 
-**Optional cron:** `GET /api/cron` refreshes every watch (wired in `vercel.json` hourly). If `CRON_SECRET` is set, send `Authorization: Bearer <CRON_SECRET>`.
+**Optional cron:** `GET /api/cron` refreshes every watch currently in the cache (wired in `vercel.json` once daily — Hobby max). If `CRON_SECRET` is set, send `Authorization: Bearer <CRON_SECRET>`. Freshness does not depend on cron.
 
-**Force refresh:** `POST /api/refresh/{id}`.
+**Force refresh:** `POST /api/refresh/[id]`.
 
 ## Run locally
 
@@ -38,7 +38,7 @@ npm test
 npm run build
 ```
 
-Watches persist to `data/watches.json` locally (gitignored). On Vercel, the store uses `/tmp/watchcal-watches.json` unless you set `WATCHCAL_DATA_PATH` to a durable location.
+Watch ids are **deterministic** (`base64url` of the source URL). The JSON file under `data/watches.json` (local) or `/tmp/watchcal-watches.json` (Vercel) is only a cache: after a cold start empties `/tmp`, `GET /api/feed/{id}.ics` decodes the id, re-fetches the source, and serves `text/calendar` again — no Blob/KV.
 
 ## API (web + MCP-shaped)
 
@@ -62,7 +62,7 @@ npm run build && npm start
 
 Optional env:
 
-- `WATCHCAL_DATA_PATH` — JSON store path
+- `WATCHCAL_DATA_PATH` — JSON cache path
 - `WATCHCAL_REFRESH_MS` — on-read staleness (ms)
 - `CRON_SECRET` — protect `/api/cron`
 

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "crypto";
+import { createHash } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import type { WatchRecord, WatchStoreFile } from "./types";
@@ -8,7 +8,7 @@ export const FREE_WATCH_LIMIT = 1;
 
 function defaultDataPath(): string {
   if (process.env.WATCHCAL_DATA_PATH) return process.env.WATCHCAL_DATA_PATH;
-  // Vercel serverless FS is read-only except /tmp
+  // Vercel serverless FS is read-only except /tmp — cache only; ids encode the source URL
   if (process.env.VERCEL) return "/tmp/watchcal-watches.json";
   return path.join(process.cwd(), "data", "watches.json");
 }
@@ -35,8 +35,26 @@ async function writeStore(filePath: string, store: WatchStoreFile): Promise<void
   await writeFile(filePath, JSON.stringify(store, null, 2) + "\n", "utf8");
 }
 
-export function newWatchId(): string {
-  return randomBytes(8).toString("hex");
+/**
+ * Deterministic watch id from source URL (base64url).
+ * Feed GET can decode the id and rebuild after a cold /tmp wipe — no Blob/KV.
+ */
+export function watchIdFromSourceUrl(sourceUrl: string): string {
+  const normalized = new URL(sourceUrl.trim()).toString();
+  return Buffer.from(normalized, "utf8").toString("base64url");
+}
+
+/** Decode source URL from a watch id, or null if not a valid encoded URL. */
+export function sourceUrlFromWatchId(id: string): string | null {
+  try {
+    const clean = id.replace(/\.ics$/i, "");
+    const decoded = Buffer.from(clean, "base64url").toString("utf8");
+    const url = new URL(decoded);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export function hashContent(content: string): string {
@@ -62,8 +80,11 @@ export async function findWatchBySourceUrl(
   sourceUrl: string,
   dataPath: string = defaultDataPath()
 ): Promise<WatchRecord | null> {
+  const normalized = new URL(sourceUrl.trim()).toString();
+  const byId = await getWatch(watchIdFromSourceUrl(normalized), dataPath);
+  if (byId) return byId;
   const store = await readStore(dataPath);
-  return store.watches.find((w) => w.sourceUrl === sourceUrl) ?? null;
+  return store.watches.find((w) => w.sourceUrl === normalized || w.sourceUrl === sourceUrl) ?? null;
 }
 
 export async function saveWatch(
