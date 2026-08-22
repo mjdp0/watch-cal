@@ -58,15 +58,29 @@ export async function fetchSource(
   fetcher: typeof fetch = fetch
 ): Promise<FetchedSource> {
   const url = assertPublicHttpUrl(sourceUrl);
-  const res = await fetcher(url.toString(), {
-    redirect: "follow",
-    headers: {
-      "User-Agent": "WatchCal/0.1 (+https://github.com/mjdp0/watch-cal)",
-      Accept: "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.9,*/*;q=0.8",
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetcher(url.toString(), {
+      redirect: "follow",
+      headers: {
+        "User-Agent": "WatchCal/0.1 (+https://github.com/mjdp0/watch-cal)",
+        Accept:
+          "text/html,application/xhtml+xml,application/pdf,text/plain;q=0.9,*/*;q=0.8",
+      },
+    });
+  } catch {
+    const err = new Error(
+      `Source fetch failed: could not reach ${url.hostname}`
+    ) as Error & { status?: number };
+    err.status = 422;
+    throw err;
+  }
   if (!res.ok) {
-    throw new Error(`Source fetch failed (${res.status})`);
+    const err = new Error(
+      `Source fetch failed (${res.status}): ${url.hostname} returned an error`
+    ) as Error & { status?: number };
+    err.status = 422;
+    throw err;
   }
   const ab = await res.arrayBuffer();
   if (ab.byteLength > MAX_BYTES) {
