@@ -20,4 +20,8 @@ export type WatchRecord = {
 
 export type WatchStoreFile = {
   watches: WatchRecord[];
+  /** Pay-once Polar credits: each credit allows one extra watched URL beyond FREE_WATCH_LIMIT. */
+  extraWatchCredits?: number;
+  /** Webhook event ids already granted (idempotency). */
+  grantedEventIds?: string[];
 };

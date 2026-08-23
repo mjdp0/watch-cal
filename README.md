@@ -4,7 +4,7 @@ Paste a **public page or PDF URL** that changes (school term list, fixture PDF, 
 
 WatchCal re-fetches the source and updates **the same feed**. A one-shot `.ics` download is a free extra — the product is the hosted poll URL, not a paste box.
 
-No login. Free path: **one watch**. This is **not billed SaaS** (no Polar / Stripe / Lemon in this repo).
+No login. Free path: **one watch**. Need another watched URL on the same instance? Buy a **pay-once Polar credit** (one credit = one extra URL) — not a subscription and not billed SaaS.
 
 ## How to subscribe
 
@@ -49,6 +49,10 @@ Controller shape: `{ success, message, payload }`.
 | `watch(url)` | `POST /api/watches` `{ "url": "…" }` | `payload.webcal_url`, `payload.https_url`, `payload.id` |
 | `refresh(id)` | `POST /api/refresh/{id}` | updated hash + event count |
 | feed | `GET /api/feed/{id}.ics` | `text/calendar` |
+| Polar checkout | `POST /api/polar/checkout` | `payload.checkout_url` (or “checkout not configured”) |
+| Polar webhook | `POST /api/polar/webhook` | grants +1 extra watch credit on paid checkout |
+
+When the free watch cap is hit, `POST /api/watches` returns **402** with `payload.checkout_url` when Polar is configured.
 
 MCP-shaped helpers are documented in `lib/watch.ts`; the browser path does not depend on MCP.
 
@@ -65,6 +69,8 @@ Optional env:
 - `WATCHCAL_DATA_PATH` — JSON cache path
 - `WATCHCAL_REFRESH_MS` — on-read staleness (ms)
 - `CRON_SECRET` — protect `/api/cron`
+
+**Polar pay-once extra URL** (secrets only via env — never hardcode): set `POLAR_ACCESS_TOKEN`, `POLAR_PRODUCT_ID`, `POLAR_WEBHOOK_SECRET`, and optional `POLAR_SUCCESS_URL`. Create a one-time Polar product (not a recurring plan), point a webhook at `/api/polar/webhook`, and subscribe to `order.paid` (and optionally `checkout.updated`). Checkout uses Polar’s official `POST /v1/checkouts/` session API. If those keys are missing, the pay button still appears but returns clear `checkout not configured` JSON — it never fakes a paid watch.
 
 ## License
 

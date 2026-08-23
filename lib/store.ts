@@ -21,11 +21,21 @@ async function readStore(filePath: string): Promise<WatchStoreFile> {
   try {
     const raw = await readFile(filePath, "utf8");
     const parsed = JSON.parse(raw) as WatchStoreFile;
-    if (!parsed || !Array.isArray(parsed.watches)) return { watches: [] };
-    return parsed;
+    if (!parsed || !Array.isArray(parsed.watches)) {
+      return { watches: [], extraWatchCredits: 0, grantedEventIds: [] };
+    }
+    return {
+      watches: parsed.watches,
+      extraWatchCredits: Number(parsed.extraWatchCredits) || 0,
+      grantedEventIds: Array.isArray(parsed.grantedEventIds)
+        ? parsed.grantedEventIds
+        : [],
+    };
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === "ENOENT") return { watches: [] };
+    if (code === "ENOENT") {
+      return { watches: [], extraWatchCredits: 0, grantedEventIds: [] };
+    }
     throw err;
   }
 }
@@ -99,6 +109,39 @@ export async function saveWatch(
   return watch;
 }
 
+export async function getExtraWatchCredits(
+  dataPath: string = defaultDataPath()
+): Promise<number> {
+  const store = await readStore(dataPath);
+  return store.extraWatchCredits ?? 0;
+}
+
+export async function maxWatchSlots(
+  dataPath: string = defaultDataPath()
+): Promise<number> {
+  return FREE_WATCH_LIMIT + (await getExtraWatchCredits(dataPath));
+}
+
+/**
+ * Grant one pay-once extra-watch credit (idempotent per eventId).
+ */
+export async function grantExtraWatchCredit(
+  eventId: string,
+  dataPath: string = defaultDataPath()
+): Promise<{ granted: boolean; credits: number }> {
+  const store = await readStore(dataPath);
+  const grantedIds = store.grantedEventIds ?? [];
+  if (eventId && grantedIds.includes(eventId)) {
+    return { granted: false, credits: store.extraWatchCredits ?? 0 };
+  }
+  if (eventId) grantedIds.push(eventId);
+  const credits = (store.extraWatchCredits ?? 0) + 1;
+  store.extraWatchCredits = credits;
+  store.grantedEventIds = grantedIds;
+  await writeStore(dataPath, store);
+  return { granted: true, credits };
+}
+
 export async function canCreateWatch(
   sourceUrl: string,
   dataPath: string = defaultDataPath()
@@ -107,10 +150,11 @@ export async function canCreateWatch(
   if (existingSame) return { ok: true };
 
   const all = await listWatches(dataPath);
-  if (all.length >= FREE_WATCH_LIMIT) {
+  const max = await maxWatchSlots(dataPath);
+  if (all.length >= max) {
     return {
       ok: false,
-      reason: `Free path allows ${FREE_WATCH_LIMIT} watch. Refresh or reuse the existing feed.`,
+      reason: `Free path allows ${FREE_WATCH_LIMIT} watch. Pay once for one extra watched URL, or refresh/reuse the existing feed.`,
       existing: all[0],
     };
   }

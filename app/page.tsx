@@ -18,6 +18,9 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [watch, setWatch] = useState<WatchPayload | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [needsExtraWatch, setNeedsExtraWatch] = useState(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutHint, setCheckoutHint] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -25,6 +28,8 @@ export default function HomePage() {
     setError(null);
     setWatch(null);
     setCopied(null);
+    setNeedsExtraWatch(false);
+    setCheckoutHint(null);
     try {
       const res = await fetch("/api/watches", {
         method: "POST",
@@ -34,7 +39,11 @@ export default function HomePage() {
       const data = (await res.json()) as {
         success: boolean;
         message: string;
-        payload: WatchPayload & { existing_id?: string };
+        payload: WatchPayload & {
+          existing_id?: string;
+          checkout_url?: string | null;
+          checkout_message?: string;
+        };
       };
       if (!data.success) {
         if (data.payload?.https_url) {
@@ -49,6 +58,12 @@ export default function HomePage() {
           });
         }
         setError(data.message);
+        if (res.status === 402 || res.status === 403) {
+          setNeedsExtraWatch(true);
+          if (data.payload?.checkout_message) {
+            setCheckoutHint(data.payload.checkout_message);
+          }
+        }
         return;
       }
       setWatch(data.payload);
@@ -61,6 +76,28 @@ export default function HomePage() {
       setError("Could not create watch");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function startExtraWatchCheckout() {
+    setCheckoutBusy(true);
+    setCheckoutHint(null);
+    try {
+      const res = await fetch("/api/polar/checkout", { method: "POST" });
+      const data = (await res.json()) as {
+        success: boolean;
+        message: string;
+        payload: { checkout_url: string | null };
+      };
+      if (!data.success || !data.payload?.checkout_url) {
+        setCheckoutHint(data.message || "checkout not configured");
+        return;
+      }
+      window.open(data.payload.checkout_url, "_blank", "noopener,noreferrer");
+    } catch {
+      setCheckoutHint("checkout not configured");
+    } finally {
+      setCheckoutBusy(false);
     }
   }
 
@@ -100,6 +137,23 @@ export default function HomePage() {
       </form>
 
       {error && <p className="error">{error}</p>}
+
+      {needsExtraWatch && (
+        <div className="pay-once">
+          <p>
+            One free watch is already on this instance. Pay once for one extra
+            watched URL — not a recurring plan.
+          </p>
+          <button
+            type="button"
+            onClick={startExtraWatchCheckout}
+            disabled={checkoutBusy}
+          >
+            {checkoutBusy ? "Opening checkout…" : "Pay once for one extra watch"}
+          </button>
+          {checkoutHint && <p className="error">{checkoutHint}</p>}
+        </div>
+      )}
 
       {watch && (
         <section className="result" aria-live="polite">
@@ -147,9 +201,10 @@ export default function HomePage() {
       )}
 
       <p className="note">
-        Free path: <strong>1 free watch</strong>, no login, not billed SaaS.
-        Refresh happens when calendars poll the feed (and via optional daily
-        cron). Not a paste-box demo — the product is the hosted poll URL.
+        Free path: <strong>1 free watch</strong>, no login. Extra watched URLs
+        are pay-once Polar credits (one credit = one extra URL), not billed
+        SaaS. Refresh happens when calendars poll the feed (and via optional
+        daily cron). Not a paste-box demo — the product is the hosted poll URL.
       </p>
     </main>
   );
