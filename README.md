@@ -47,6 +47,7 @@ Controller shape: `{ success, message, payload }`.
 | Call | HTTP | Result |
 |------|------|--------|
 | `watch(url)` | `POST /api/watches` `{ "url": "…" }` | `payload.webcal_url`, `payload.https_url`, `payload.id` |
+| `preview(url)` | `POST /api/preview` `{ "url": "…" }` | dry-run `payload.title` + `payload.event_count` (no mint, no quota) |
 | `refresh(id)` | `POST /api/refresh/{id}` | updated hash + event count |
 | feed | `GET /api/feed/{id}.ics` | `text/calendar` |
 | Polar checkout | `POST /api/polar/checkout` | `payload.checkout_url` (or “checkout not configured”) |

@@ -3,6 +3,7 @@
  *
  * MCP-shaped surface (optional; web path does not depend on MCP):
  *   watch(url)    → { id, webcal_url, https_url }
+ *   preview(url)  → { title, event_count } (no mint, no quota)
  *   refresh(id)   → { id, updated, event_count, source_hash }
  *
  * Refresh policy: on-read (feed GET) re-fetches when stale, plus optional
@@ -137,6 +138,37 @@ export async function refreshWatch(
     updatedAt: now.toISOString(),
   };
   return saveWatch(updated, opts.dataPath);
+}
+
+export type PreviewResult = {
+  source_url: string;
+  title: string;
+  event_count: number;
+};
+
+/**
+ * preview(url) — dry-run fetch+parse. Does not create a watch or consume quota.
+ */
+export async function previewUrl(
+  sourceUrl: string,
+  opts: {
+    fetcher?: typeof fetch;
+    now?: Date;
+  } = {}
+): Promise<PreviewResult> {
+  const normalized = assertPublicHttpUrl(sourceUrl).toString();
+  const now = opts.now ?? new Date();
+  const fetched = await fetchSource(normalized, opts.fetcher);
+  const { title, events } = parseSourceText(fetched.text, now, {
+    sourceTitle: fetched.title,
+    sourceUrl: normalized,
+  });
+  const calName = fetched.title || title || "WatchCal";
+  return {
+    source_url: normalized,
+    title: calName,
+    event_count: events.length,
+  };
 }
 
 /**
