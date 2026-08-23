@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 type WatchPayload = {
   id: string;
@@ -12,6 +12,73 @@ type WatchPayload = {
   source_url: string;
 };
 
+/** Browser-only last-watch key — not a shareable product URL. */
+const LAST_WATCH_KEY = "watchcal:lastWatch";
+
+type LastWatchStored = {
+  id: string;
+  title: string;
+  event_count: number;
+  source_url: string;
+};
+
+function linksForId(id: string, origin: string) {
+  const base = origin.replace(/\/$/, "");
+  const https_url = `${base}/api/feed/${id}.ics`;
+  const webcal_url = https_url
+    .replace(/^https:/i, "webcal:")
+    .replace(/^http:/i, "webcal:");
+  return {
+    https_url,
+    webcal_url,
+    download_url: `${https_url}?download=1`,
+  };
+}
+
+function hydrateLastWatch(
+  stored: LastWatchStored,
+  origin: string
+): WatchPayload {
+  return {
+    id: stored.id,
+    title: stored.title,
+    event_count: stored.event_count,
+    source_url: stored.source_url,
+    ...linksForId(stored.id, origin),
+  };
+}
+
+function readLastWatch(origin: string): WatchPayload | null {
+  try {
+    const raw = localStorage.getItem(LAST_WATCH_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as Partial<LastWatchStored>;
+    if (!data.id || typeof data.id !== "string") return null;
+    return hydrateLastWatch(
+      {
+        id: data.id,
+        title: typeof data.title === "string" ? data.title : "WatchCal",
+        event_count:
+          typeof data.event_count === "number" ? data.event_count : 0,
+        source_url: typeof data.source_url === "string" ? data.source_url : "",
+      },
+      origin
+    );
+  } catch {
+    return null;
+  }
+}
+
+function writeLastWatch(watch: WatchPayload) {
+  const stored: LastWatchStored = {
+    id: watch.id,
+    title: watch.title,
+    event_count: watch.event_count,
+    source_url: watch.source_url,
+  };
+  localStorage.setItem(LAST_WATCH_KEY, JSON.stringify(stored));
+}
+
 export default function HomePage() {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
@@ -21,6 +88,18 @@ export default function HomePage() {
   const [needsExtraWatch, setNeedsExtraWatch] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutHint, setCheckoutHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    const restored = readLastWatch(window.location.origin);
+    if (!restored) return;
+    setWatch(restored);
+    if (restored.source_url) setUrl(restored.source_url);
+  }, []);
+
+  function rememberWatch(next: WatchPayload) {
+    setWatch(next);
+    writeLastWatch(next);
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -47,7 +126,7 @@ export default function HomePage() {
       };
       if (!data.success) {
         if (data.payload?.https_url) {
-          setWatch({
+          rememberWatch({
             id: data.payload.existing_id || data.payload.id,
             title: "Existing watch",
             event_count: 0,
@@ -66,7 +145,7 @@ export default function HomePage() {
         }
         return;
       }
-      setWatch(data.payload);
+      rememberWatch(data.payload);
       if (data.payload.event_count === 0) {
         setError(
           "No dated events found on that page. Feeds only include lines with a real calendar date (day, month, and year)."
