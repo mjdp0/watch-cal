@@ -166,6 +166,98 @@ describe("parseSource", () => {
     const { events } = parseSourceText(text, new Date("2026-01-10T00:00:00Z"));
     assert.equal(events.length, 0);
   });
+
+  it("titles Western Cape Opens/Closes rows as Term N opens/closes", () => {
+    // Mirrors https://www.westerncape.gov.za/education/school-calendar structure:
+    // ordinal heading + Opens/Closes list items (incl. dual (1)/(2) dates).
+    const html = `
+      <html><head><title>School Calendar | Western Cape Government</title></head>
+      <body>
+        <p><strong>Terms (All Provinces)</strong></p>
+        <p><strong>First</strong></p>
+        <ul>
+          <li>Opens: 12 January 2026 <strong>(1)</strong> | 14 January 2026 <strong>(2)</strong></li>
+          <li>Closes: 27 March 2026</li>
+        </ul>
+        <p><strong>Second</strong></p>
+        <ul>
+          <li>Opens: 8 April 2026</li>
+          <li>Closes: 26 June 2026</li>
+        </ul>
+        <p><strong>Third</strong></p>
+        <ul>
+          <li>Opens: 21 July 2026</li>
+          <li>Closes: 23 September 2026</li>
+        </ul>
+        <p><strong>Fourth</strong></p>
+        <ul>
+          <li>Opens: 6 October 2026</li>
+          <li>Closes: 9 December 2026 <strong>(2)</strong> | 11 December 2026 <strong>(1)</strong></li>
+        </ul>
+        <h4>2026 Public Holidays (Including School Holidays)</h4>
+        <p>1 January 2026 – New Year’s Day</p>
+        <p>21 March 2026 – Human Rights Day</p>
+        <p>3 April 2026 – Good Friday</p>
+      </body></html>
+    `;
+    const { text } = htmlToText(html);
+    const { events } = parseSourceText(text, new Date("2026-08-23T00:00:00Z"), {
+      sourceTitle: "School Calendar | Western Cape Government",
+      sourceUrl: "https://www.westerncape.gov.za/education/school-calendar",
+    });
+
+    for (const e of events) {
+      assert.doesNotMatch(e.summary, /^(Opens|Closes)$/i);
+      assert.doesNotMatch(e.summary, /^\(\d+\)/);
+    }
+
+    const term1Open = events.filter(
+      (e) => e.summary === "Term 1 opens" && /^2026-01-(12|14)/.test(e.start)
+    );
+    assert.equal(term1Open.length, 2, "dual Term 1 open dates");
+
+    const term1Close = events.find(
+      (e) => e.summary === "Term 1 closes" && e.start.startsWith("2026-03-27")
+    );
+    assert.ok(term1Close);
+
+    assert.ok(
+      events.some(
+        (e) => e.summary === "Term 2 opens" && e.start.startsWith("2026-04-08")
+      )
+    );
+    assert.ok(
+      events.some(
+        (e) => e.summary === "Term 2 closes" && e.start.startsWith("2026-06-26")
+      )
+    );
+    assert.ok(
+      events.some(
+        (e) => e.summary === "Term 3 opens" && e.start.startsWith("2026-07-21")
+      )
+    );
+    assert.ok(
+      events.some(
+        (e) => e.summary === "Term 3 closes" && e.start.startsWith("2026-09-23")
+      )
+    );
+    assert.ok(
+      events.some(
+        (e) => e.summary === "Term 4 opens" && e.start.startsWith("2026-10-06")
+      )
+    );
+    const term4Close = events.filter(
+      (e) =>
+        e.summary === "Term 4 closes" && /^2026-12-(09|11)/.test(e.start)
+    );
+    assert.equal(term4Close.length, 2, "dual Term 4 close dates");
+
+    const nye = events.find((e) => /New Year/i.test(e.summary));
+    assert.ok(nye, "named public holidays stay named");
+    assert.match(nye!.start, /^2026-01-01/);
+    assert.ok(events.some((e) => /Human Rights/i.test(e.summary)));
+    assert.ok(events.some((e) => /Good Friday/i.test(e.summary)));
+  });
 });
 
 describe("deterministic watch ids", () => {
