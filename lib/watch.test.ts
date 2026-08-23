@@ -12,7 +12,7 @@ import {
   sourceUrlFromWatchId,
   watchIdFromSourceUrl,
 } from "./store";
-import { feedPaths, getFeedIcs, refreshWatch, watchUrl } from "./watch";
+import { feedPaths, getFeedIcs, previewUrl, refreshWatch, watchUrl } from "./watch";
 import type { ParsedEvent } from "./types";
 
 describe("assertPublicHttpUrl", () => {
@@ -61,7 +61,7 @@ describe("assertPublicHttpUrl", () => {
 });
 
 describe("homepage examples and copy", () => {
-  it("extra examples only fill the URL; free example may create a watch", async () => {
+  it("extra examples dry-run via /api/preview; free example may create a watch", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
@@ -69,10 +69,12 @@ describe("homepage examples and copy", () => {
     assert.match(page, /feedId\?/);
     assert.match(page, /if \(example\.feedId\)/);
     assert.match(page, /void createWatch\(example\.url\)/);
-    // Extra tiles must not auto-POST — that 402 + existing feed looked like a parse fail
+    assert.match(page, /void previewExample\(example\.url\)/);
+    assert.match(page, /\/api\/preview/);
+    // Extra tiles must not POST /api/watches — that 402 + existing feed looked like a parse fail
     assert.match(
       page,
-      /Extra examples only fill|only fill the\s*\n?\s*field|auto-POST would 402/i
+      /never POST \/api\/watches|Extra examples dry-run/i
     );
     // 402 must not hydrate the free watch under the new URL
     assert.doesNotMatch(
@@ -91,7 +93,7 @@ describe("homepage examples and copy", () => {
     );
   });
 
-  it("extra example tiles show Extra / $5 (no feedId)", async () => {
+  it("extra example tiles show Extra / $5 (no feedId); only proven extras ship", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
@@ -101,7 +103,12 @@ describe("homepage examples and copy", () => {
       /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
     );
     assert.match(page, /St Stithians/);
-    assert.match(page, /NSC exams/);
+    // NSC was never proven via Node fetch — omitted rather than half-baked
+    assert.doesNotMatch(page, /NSC exams/);
+    assert.doesNotMatch(
+      page,
+      /url:\s*"https:\/\/www\.education\.gov\.za/
+    );
     // Free Western Cape tile keeps feedId — not labeled Extra / $5 in the EXAMPLES entry
     assert.match(page, /feedId: WESTERN_CAPE_FEED_ID/);
   });
@@ -655,6 +662,77 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
       assert.equal(e.status, 400);
       assert.match(e.message, /Image URLs are not supported/i);
       assert.match(e.message, /page or PDF/i);
+      assert.doesNotMatch(e.message, /No dated events|0 event/i);
+    }
+    assert.equal(threw, true);
+    assert.equal(await getWatch(watchIdFromSourceUrl(sourceUrl), dataPath), null);
+    sourceContentType = "text/html; charset=utf-8";
+  });
+
+  it("preview dry-run returns title + event_count without minting or consuming quota", async () => {
+    sourceStatus = 200;
+    failNetwork = false;
+    sourceContentType = "text/html; charset=utf-8";
+    sourceBody = `<html><title>Preview Page</title><body><p>Meet 3 August 2026</p><p>Final 10 August 2026</p></body></html>`;
+    const previewSource = "https://example.com/preview-only";
+    const before = await getWatch(watchIdFromSourceUrl(previewSource), dataPath);
+    assert.equal(before, null);
+
+    const result = await previewUrl(previewSource, { fetcher });
+    assert.equal(result.source_url, new URL(previewSource).toString());
+    assert.match(result.title, /Preview Page/);
+    assert.ok(result.event_count >= 2);
+
+    // No watch written — free quota untouched
+    assert.equal(
+      await getWatch(watchIdFromSourceUrl(previewSource), dataPath),
+      null
+    );
+
+    // A second distinct URL still hits the free-tier gate (preview did not mint)
+    sourceBody = `<html><title>Other</title><body><p>Event 1 July 2026</p></body></html>`;
+    let threw = false;
+    try {
+      await watchUrl("https://example.com/still-capped", "https://watchcal.example", {
+        dataPath,
+        fetcher,
+      });
+    } catch (err: unknown) {
+      threw = true;
+      const e = err as Error & { status?: number; needsPayment?: boolean };
+      assert.equal(e.status, 402);
+      assert.equal(e.needsPayment, true);
+    }
+    assert.equal(threw, true);
+  });
+
+  it("preview rejects image URLs with 400 (no empty success)", async () => {
+    let threw = false;
+    try {
+      await previewUrl("https://cdn.example.com/shot.png", { fetcher });
+    } catch (err: unknown) {
+      threw = true;
+      const e = err as Error & { status?: number };
+      assert.equal(e.status, 400);
+      assert.match(e.message, /Image URLs are not supported/i);
+    }
+    assert.equal(threw, true);
+  });
+
+  it("preview rejects Content-Type image/* with 400 (no empty success)", async () => {
+    sourceStatus = 200;
+    failNetwork = false;
+    sourceContentType = "image/jpeg";
+    sourceBody = "\xff\xd8fake";
+    const sourceUrl = "https://cdn.example.com/media/noext";
+    let threw = false;
+    try {
+      await previewUrl(sourceUrl, { fetcher });
+    } catch (err: unknown) {
+      threw = true;
+      const e = err as Error & { status?: number };
+      assert.equal(e.status, 400);
+      assert.match(e.message, /Image URLs are not supported/i);
       assert.doesNotMatch(e.message, /No dated events|0 event/i);
     }
     assert.equal(threw, true);

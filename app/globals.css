@@ -121,6 +121,20 @@ button.example:hover {
   text-underline-offset: 2px;
 }
 
+.preview {
+  margin-top: 1.25rem;
+  padding: 1rem 1.1rem;
+  border: 1px dashed var(--line);
+  background: var(--surface);
+  animation: rise 0.45s ease both;
+}
+
+.preview h2 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
 .form label {
   font-size: 0.85rem;
   font-weight: 600;

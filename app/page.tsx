@@ -19,6 +19,11 @@ const LAST_WATCH_KEY = "watchcal:lastWatch";
 const WESTERN_CAPE_FEED_ID =
   "aHR0cHM6Ly93d3cud2VzdGVybmNhcGUuZ292LnphL2VkdWNhdGlvbi9zY2hvb2wtY2FsZW5kYXI";
 
+/**
+ * Extra tiles (no feedId) must be proven via POST /api/preview dry-run.
+ * Unproven extras are omitted rather than shipped half-baked.
+ * Western Cape stays as the only free/live feedId tile.
+ */
 const EXAMPLES: {
   label: string;
   url: string;
@@ -33,11 +38,13 @@ const EXAMPLES: {
     label: "School calendar (St Stithians)",
     url: "https://www.stithian.com/uploads/files/St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf",
   },
-  {
-    label: "NSC exams 2026",
-    url: "https://www.education.gov.za/LinkClick.aspx?fileticket=312B9JSmyzQ%3D&mid=4149&portalid=0&tabid=338",
-  },
 ];
+
+type PreviewPayload = {
+  source_url: string;
+  title: string;
+  event_count: number;
+};
 
 type LastWatchStored = {
   id: string;
@@ -113,6 +120,9 @@ export default function HomePage() {
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutHint, setCheckoutHint] = useState<string | null>(null);
   const [origin, setOrigin] = useState("https://watch-cal.vercel.app");
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [preview, setPreview] = useState<PreviewPayload | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -134,6 +144,8 @@ export default function HomePage() {
     setCopied(null);
     setNeedsExtraWatch(false);
     setCheckoutHint(null);
+    setPreview(null);
+    setPreviewError(null);
     try {
       const res = await fetch("/api/watches", {
         method: "POST",
@@ -213,19 +225,49 @@ export default function HomePage() {
     }
   }
 
-  function useExample(example: (typeof EXAMPLES)[number]) {
-    setUrl(example.url);
-    // First/free example may create a watch. Extra examples only fill the
-    // field — auto-POST would 402 and look like a failed parse.
-    if (example.feedId) {
-      void createWatch(example.url);
-      return;
-    }
+  async function previewExample(sourceUrl: string) {
+    setPreviewBusy(true);
+    setPreview(null);
+    setPreviewError(null);
     setWatch(null);
     setError(null);
     setNeedsExtraWatch(false);
     setCheckoutHint(null);
     setCopied(null);
+    try {
+      const res = await fetch("/api/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: sourceUrl }),
+      });
+      const data = (await res.json()) as {
+        success: boolean;
+        message: string;
+        payload: PreviewPayload;
+      };
+      if (!data.success) {
+        setPreviewError(data.message || "Preview failed");
+        return;
+      }
+      setPreview(data.payload);
+    } catch {
+      setPreviewError("Could not preview URL");
+    } finally {
+      setPreviewBusy(false);
+    }
+  }
+
+  function useExample(example: (typeof EXAMPLES)[number]) {
+    setUrl(example.url);
+    // Free/live Western Cape may create a watch. Extra examples dry-run
+    // via /api/preview — never POST /api/watches (would 402 / mint).
+    if (example.feedId) {
+      setPreview(null);
+      setPreviewError(null);
+      void createWatch(example.url);
+      return;
+    }
+    void previewExample(example.url);
   }
 
   async function startExtraWatchCheckout() {
@@ -279,9 +321,9 @@ export default function HomePage() {
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             onPaste={onUrlPaste}
-            disabled={busy}
+            disabled={busy || previewBusy}
           />
-          <button type="submit" disabled={busy}>
+          <button type="submit" disabled={busy || previewBusy}>
             {busy ? "Watching…" : "Create watch"}
           </button>
         </div>
@@ -299,7 +341,7 @@ export default function HomePage() {
                 <button
                   type="button"
                   className="example"
-                  disabled={busy}
+                  disabled={busy || previewBusy}
                   onClick={() => useExample(example)}
                 >
                   {example.label}
@@ -322,6 +364,21 @@ export default function HomePage() {
       </div>
 
       {error && <p className="error">{error}</p>}
+
+      {(previewBusy || preview || previewError) && (
+        <section className="preview" aria-live="polite">
+          <h2>Dry-run preview</h2>
+          {previewBusy && <p className="meta">Parsing… no watch created</p>}
+          {previewError && <p className="error">{previewError}</p>}
+          {preview && (
+            <p className="meta">
+              {preview.title} · {preview.event_count} event
+              {preview.event_count === 1 ? "" : "s"} · not watched (quota
+              untouched)
+            </p>
+          )}
+        </section>
+      )}
 
       {needsExtraWatch && (
         <div className="pay-once">
