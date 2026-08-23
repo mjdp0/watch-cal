@@ -9,6 +9,8 @@ export type FetchedSource = {
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
+const IMAGE_PATH_RE = /\.(png|jpe?g|gif|webp)$/i;
+
 export function assertPublicHttpUrl(raw: string): URL {
   let url: URL;
   try {
@@ -18,6 +20,13 @@ export function assertPublicHttpUrl(raw: string): URL {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Only http(s) URLs are supported");
+  }
+  if (IMAGE_PATH_RE.test(url.pathname)) {
+    const err = new Error(
+      "Image URLs are not supported. Use a public https link to a page or PDF — not a screenshot or photo."
+    ) as Error & { status?: number };
+    err.status = 400;
+    throw err;
   }
   const host = url.hostname.toLowerCase();
   if (

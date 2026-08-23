@@ -150,17 +150,8 @@ export default function HomePage() {
         };
       };
       if (!data.success) {
-        if (data.payload?.https_url) {
-          rememberWatch({
-            id: data.payload.existing_id || data.payload.id,
-            title: "Existing watch",
-            event_count: 0,
-            https_url: data.payload.https_url,
-            webcal_url: data.payload.webcal_url,
-            download_url: data.payload.download_url,
-            source_url: sourceUrl,
-          });
-        }
+        // Do not hydrate the free watch's feed under a different URL — that
+        // looks like a failed parse of the example the user just tried.
         setError(data.message);
         if (res.status === 402 || res.status === 403) {
           setNeedsExtraWatch(true);
@@ -188,9 +179,19 @@ export default function HomePage() {
     await createWatch(url);
   }
 
-  function useExample(sourceUrl: string) {
-    setUrl(sourceUrl);
-    void createWatch(sourceUrl);
+  function useExample(example: (typeof EXAMPLES)[number]) {
+    setUrl(example.url);
+    // First/free example may create a watch. Extra examples only fill the
+    // field — auto-POST would 402 and look like a failed parse.
+    if (example.feedId) {
+      void createWatch(example.url);
+      return;
+    }
+    setWatch(null);
+    setError(null);
+    setNeedsExtraWatch(false);
+    setCheckoutHint(null);
+    setCopied(null);
   }
 
   async function startExtraWatchCheckout() {
@@ -228,12 +229,13 @@ export default function HomePage() {
     <main>
       <h1 className="brand">WatchCal</h1>
       <p className="lede">
-        Paste a public page or PDF that changes. Get one stable calendar
-        subscribe URL that Apple and Google already know how to poll.
+        Enter a public https link (page or PDF URL) that changes. Get one
+        stable calendar subscribe URL that Apple and Google already know how
+        to poll.
       </p>
 
       <form className="form" onSubmit={onSubmit}>
-        <label htmlFor="source">Public URL</label>
+        <label htmlFor="source">Public https link</label>
         <div className="row">
           <input
             id="source"
@@ -263,7 +265,7 @@ export default function HomePage() {
                   type="button"
                   className="example"
                   disabled={busy}
-                  onClick={() => useExample(example.url)}
+                  onClick={() => useExample(example)}
                 >
                   {example.label}
                 </button>

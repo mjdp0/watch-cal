@@ -1,14 +1,14 @@
 # WatchCal
 
-Paste a **public page or PDF URL** that changes (school term list, fixture PDF, municipal notice). Get **one stable webcal / https .ics subscribe URL** that Apple Calendar and Google Calendar already poll.
+Enter a **public https link** (page or PDF URL) that changes (school term list, fixture PDF, municipal notice). Get **one stable webcal / https .ics subscribe URL** that Apple Calendar and Google Calendar already poll.
 
-WatchCal re-fetches the source and updates **the same feed**. A one-shot `.ics` download is a free extra — the product is the hosted poll URL, not a paste box.
+WatchCal re-fetches the source and updates **the same feed**. A one-shot `.ics` download is a free extra — the product is the hosted poll URL, not a file upload or screenshot paste.
 
 No login. Free path: **one watch**. Need another watched URL on the same instance? Buy a **pay-once Polar credit** (one credit = one extra URL) — not a subscription and not billed SaaS.
 
 ## How to subscribe
 
-1. Open the app and paste a public `https://` URL.
+1. Open the app and enter a public `https://` page or PDF URL.
 2. Copy the **webcal** link (or the https `.ics` link).
 3. In Apple Calendar: File → New Calendar Subscription… and paste the webcal URL.
 4. In Google Calendar: Settings → Add calendar → From URL → paste the https `.ics` URL.
