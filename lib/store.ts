@@ -176,7 +176,7 @@ export async function maxWatchSlots(
 }
 
 function quotaBlockedReason(): string {
-  return `Free path allows ${FREE_WATCH_LIMIT} watch. Pay once for one extra watched URL, or refresh/reuse the existing feed.`;
+  return `This URL needs a pay-once extra watch. Free path allows ${FREE_WATCH_LIMIT} watch — pay once ($5) for one extra watched URL, or reuse the existing feed.`;
 }
 
 /**

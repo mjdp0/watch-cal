@@ -83,6 +83,27 @@ describe("homepage examples and copy", () => {
       page,
       /Do not hydrate the free watch|looks like a failed parse/
     );
+    // 402 error must name pay-once extra watch, not parse failure
+    assert.match(page, /This URL needs a pay-once extra watch/);
+    assert.match(
+      page,
+      /if \(res\.status === 402 \|\| res\.status === 403\) \{\s*setNeedsExtraWatch\(true\);\s*setError\(/
+    );
+  });
+
+  it("extra example tiles show Extra / $5 (no feedId)", async () => {
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.match(
+      page,
+      /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
+    );
+    assert.match(page, /St Stithians/);
+    assert.match(page, /NSC exams/);
+    // Free Western Cape tile keeps feedId — not labeled Extra / $5 in the EXAMPLES entry
+    assert.match(page, /feedId: WESTERN_CAPE_FEED_ID/);
   });
 
   it("copy invites a public https link, not upload or screenshot paste", async () => {
@@ -97,7 +118,12 @@ describe("homepage examples and copy", () => {
     assert.match(page, /public https link \(page or PDF URL\)/i);
     assert.match(page, /Public https link/);
     assert.doesNotMatch(page, /Paste a public page or PDF(?! URL)/i);
-    assert.doesNotMatch(page, /screenshot|photo OCR|file upload|type=["']file["']/i);
+    assert.doesNotMatch(page, /photo OCR|type=["']file["']/i);
+    assert.match(page, /onPaste=\{onUrlPaste\}/);
+    assert.match(
+      page,
+      /Use a public https link to a page or PDF — not a screenshot or photo/
+    );
     assert.match(layout, /public https link \(page or PDF URL\)/i);
     // Single URL text field only
     assert.equal((page.match(/type="url"/g) || []).length, 1);
@@ -408,6 +434,7 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
   let dataPath = "";
   let sourceBody = "";
   let sourceStatus = 200;
+  let sourceContentType = "text/html; charset=utf-8";
   let failNetwork = false;
 
   const fetcher: typeof fetch = async (input) => {
@@ -426,7 +453,7 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
     }
     return new Response(sourceBody, {
       status: 200,
-      headers: { "content-type": "text/html; charset=utf-8" },
+      headers: { "content-type": sourceContentType },
     });
   };
 
@@ -442,6 +469,7 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
   it("creates a watch with stable feed path and updates ICS when source changes", async () => {
     sourceStatus = 200;
     failNetwork = false;
+    sourceContentType = "text/html; charset=utf-8";
     sourceBody = `<html><title>Terms v1</title><body><p>Term A 10 April 2026</p></body></html>`;
     const origin = "https://watchcal.example";
     const sourceUrl = "https://example.com/terms";
@@ -495,6 +523,7 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
   it("serves text/calendar after the store is wiped (cold start)", async () => {
     sourceStatus = 200;
     failNetwork = false;
+    sourceContentType = "text/html; charset=utf-8";
     sourceBody = `<html><title>Cold</title><body><p>Match day 18 June 2026</p></body></html>`;
     const sourceUrl = "https://example.com/terms";
     const id = watchIdFromSourceUrl(sourceUrl);
@@ -560,6 +589,7 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
   it("enforces the free one-watch limit for a different reachable URL", async () => {
     sourceStatus = 200;
     failNetwork = false;
+    sourceContentType = "text/html; charset=utf-8";
     sourceBody = `<html><title>Other</title><body><p>Event 1 July 2026</p></body></html>`;
     let threw = false;
     try {
@@ -572,7 +602,9 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
       const e = err as Error & { status?: number };
       assert.equal(e.status, 402);
       assert.equal(e.needsPayment, true);
+      assert.match(e.message, /pay-once extra watch/i);
       assert.match(e.message, /1 watch|one watch|extra watched URL/i);
+      assert.doesNotMatch(e.message, /No dated events|parse/i);
     }
     assert.equal(threw, true);
   });
@@ -580,6 +612,7 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
   it("rejects image URLs before minting a watch (no 0-event feed)", async () => {
     sourceStatus = 200;
     failNetwork = false;
+    sourceContentType = "text/html; charset=utf-8";
     sourceBody = "fake image bytes";
     let threw = false;
     try {
@@ -602,5 +635,30 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
       ),
       null
     );
+  });
+
+  it("rejects Content-Type image/* with no image extension (no empty feed)", async () => {
+    sourceStatus = 200;
+    failNetwork = false;
+    sourceContentType = "image/png";
+    sourceBody = "\x89PNG\r\nfake";
+    const sourceUrl = "https://cdn.example.com/media/abc123";
+    let threw = false;
+    try {
+      await watchUrl(sourceUrl, "https://watchcal.example", {
+        dataPath,
+        fetcher,
+      });
+    } catch (err: unknown) {
+      threw = true;
+      const e = err as Error & { status?: number };
+      assert.equal(e.status, 400);
+      assert.match(e.message, /Image URLs are not supported/i);
+      assert.match(e.message, /page or PDF/i);
+      assert.doesNotMatch(e.message, /No dated events|0 event/i);
+    }
+    assert.equal(threw, true);
+    assert.equal(await getWatch(watchIdFromSourceUrl(sourceUrl), dataPath), null);
+    sourceContentType = "text/html; charset=utf-8";
   });
 });

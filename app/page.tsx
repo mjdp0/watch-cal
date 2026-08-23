@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { ClipboardEvent, FormEvent, useEffect, useState } from "react";
 
 type WatchPayload = {
   id: string;
@@ -152,12 +152,17 @@ export default function HomePage() {
       if (!data.success) {
         // Do not hydrate the free watch's feed under a different URL — that
         // looks like a failed parse of the example the user just tried.
-        setError(data.message);
         if (res.status === 402 || res.status === 403) {
           setNeedsExtraWatch(true);
+          setError(
+            data.message ||
+              "This URL needs a pay-once extra watch. One free watch is already on this instance."
+          );
           if (data.payload?.checkout_message) {
             setCheckoutHint(data.payload.checkout_message);
           }
+        } else {
+          setError(data.message);
         }
         return;
       }
@@ -177,6 +182,35 @@ export default function HomePage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     await createWatch(url);
+  }
+
+  function onUrlPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    for (const item of Array.from(cd.items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        setError(
+          "Use a public https link to a page or PDF — not a screenshot or photo."
+        );
+        setNeedsExtraWatch(false);
+        setCheckoutHint(null);
+        return;
+      }
+    }
+    const text = (cd.getData("text") || "").trim();
+    if (
+      text.startsWith("data:") ||
+      text.startsWith("blob:") ||
+      (/^[a-z][a-z0-9+.-]*:/i.test(text) && !/^https?:\/\//i.test(text))
+    ) {
+      e.preventDefault();
+      setError(
+        "Use a public https link to a page or PDF — not a screenshot or photo."
+      );
+      setNeedsExtraWatch(false);
+      setCheckoutHint(null);
+    }
   }
 
   function useExample(example: (typeof EXAMPLES)[number]) {
@@ -244,6 +278,7 @@ export default function HomePage() {
             placeholder="https://school.example/term-dates"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
+            onPaste={onUrlPaste}
             disabled={busy}
           />
           <button type="submit" disabled={busy}>
@@ -268,6 +303,9 @@ export default function HomePage() {
                   onClick={() => useExample(example)}
                 >
                   {example.label}
+                  {!example.feedId && (
+                    <span className="example-extra"> Extra / $5</span>
+                  )}
                 </button>
                 {feedLinks && (
                   <p className="example-feed">
