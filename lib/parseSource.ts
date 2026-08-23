@@ -315,6 +315,64 @@ function isChromeLine(line: string): boolean {
   return false;
 }
 
+const TERM_ORDINAL: Record<string, number> = {
+  first: 1,
+  second: 2,
+  third: 3,
+  fourth: 4,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+};
+
+/** Bare Opens/Closes or footnote leftovers — never usable as SUMMARY. */
+function isJunkSummary(s: string): boolean {
+  const t = s.trim();
+  if (/^(opens|closes)$/i.test(t)) return true;
+  // "(2)", "(1) | 14 January 2026 (2)", leftover pipe/footnote fragments
+  if (/^\(\d+\)/.test(t)) return true;
+  if (/^\(\d+\)\s*\|/.test(t)) return true;
+  return false;
+}
+
+/**
+ * Western Cape–style lists: "First" / "Opens: 14 January 2026" / "Closes: …"
+ * → "Term 1 opens". Looks only at a few preceding lines.
+ */
+function termBoundSummary(text: string, hit: DateHit): string | null {
+  const lineStart = text.lastIndexOf("\n", hit.index) + 1;
+  const lineEndIdx = text.indexOf("\n", hit.end);
+  const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx;
+  const line = text.slice(lineStart, lineEnd).replace(/\s+/g, " ").trim();
+  const verbMatch = line.match(/^(opens|closes)\b/i);
+  if (!verbMatch) return null;
+  const verb = verbMatch[1].toLowerCase() === "opens" ? "opens" : "closes";
+
+  const before = text.slice(0, lineStart);
+  const prev = before
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l) => l && !isChromeLine(l));
+  for (let i = prev.length - 1; i >= Math.max(0, prev.length - 8); i--) {
+    const t = prev[i];
+    if (/^(opens|closes)\b/i.test(t)) continue;
+    const ord = t.match(/^(first|second|third|fourth)\b/i);
+    if (ord) {
+      const n = TERM_ORDINAL[ord[1].toLowerCase()];
+      if (n) return `Term ${n} ${verb}`;
+    }
+    const tm = t.match(/^terms?\s+(\d+|one|two|three|four)\b/i);
+    if (tm) {
+      const g = tm[1].toLowerCase();
+      const n = /^\d+$/.test(g) ? Number(g) : TERM_ORDINAL[g];
+      if (n && n >= 1 && n <= 4) return `Term ${n} ${verb}`;
+    }
+  }
+  // Opens/Closes without a term heading — drop rather than emit bare verb.
+  return null;
+}
+
 /**
  * Build SUMMARY from the line containing the date (or nearest non-chrome line).
  * Returns null when nothing usable exists — caller drops the hit.
@@ -325,6 +383,11 @@ function lineSummary(text: string, hit: DateHit): string | null {
   const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx;
   let line = text.slice(lineStart, lineEnd).replace(/\s+/g, " ").trim();
 
+  // Term open/close rows: resolve before afterDate (which otherwise grabs "(2)").
+  if (/^(opens|closes)\b/i.test(line)) {
+    return termBoundSummary(text, hit);
+  }
+
   // Prefer text after the date on the same line (typical "15 March 2026 Home vs North")
   const afterDate = text
     .slice(hit.end, lineEnd)
@@ -332,9 +395,15 @@ function lineSummary(text: string, hit: DateHit): string | null {
     .trim();
   // Range rows often glue digits after the end date ("27 March1153"); prefer the range raw.
   if (hit.endDate && (!afterDate || /^\d/.test(afterDate))) {
-    return hit.raw.replace(/\s+/g, " ").trim().slice(0, 120);
+    const raw = hit.raw.replace(/\s+/g, " ").trim().slice(0, 120);
+    return isJunkSummary(raw) ? null : raw;
   }
-  if (afterDate.length >= 3 && !isChromeLine(afterDate) && !/^\d{2,}/.test(afterDate)) {
+  if (
+    afterDate.length >= 3 &&
+    !isChromeLine(afterDate) &&
+    !/^\d{2,}/.test(afterDate) &&
+    !isJunkSummary(afterDate)
+  ) {
     return afterDate.slice(0, 120);
   }
 
@@ -344,7 +413,11 @@ function lineSummary(text: string, hit: DateHit): string | null {
     .replace(/\s+/g, " ")
     .replace(/^[\s,;:\-\u2013\u2014–—]+|[\s,;:\-\u2013\u2014–—]+$/gu, "")
     .trim();
-  if (withoutDate.length >= 3 && !isChromeLine(withoutDate)) {
+  if (
+    withoutDate.length >= 3 &&
+    !isChromeLine(withoutDate) &&
+    !isJunkSummary(withoutDate)
+  ) {
     return withoutDate.slice(0, 120);
   }
 
@@ -363,7 +436,12 @@ function lineSummary(text: string, hit: DateHit): string | null {
   for (const j of [lineIdx - 1, lineIdx + 1, lineIdx - 2, lineIdx + 2]) {
     if (j < 0 || j >= lines.length) continue;
     const cand = lines[j].trim();
-    if (!isChromeLine(cand) && cand.length >= 3 && cand.length <= 120) {
+    if (
+      !isChromeLine(cand) &&
+      cand.length >= 3 &&
+      cand.length <= 120 &&
+      !isJunkSummary(cand)
+    ) {
       return cand.slice(0, 120);
     }
   }
