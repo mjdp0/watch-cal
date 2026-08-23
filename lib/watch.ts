@@ -16,7 +16,7 @@ import { eventsToIcs } from "./ics";
 import { assertPublicHttpUrl, fetchSource } from "./fetchSource";
 import { parseSourceText } from "./parseSource";
 import {
-  canCreateWatch,
+  createWatchAtomic,
   findWatchBySourceUrl,
   getWatch,
   hashContent,
@@ -165,19 +165,6 @@ export async function watchUrl(
   const now = opts.now ?? new Date();
   const fetched = await fetchSource(normalized, opts.fetcher);
 
-  const gate = await canCreateWatch(normalized, opts.dataPath);
-  if (!gate.ok) {
-    const err = new Error(gate.reason) as Error & {
-      status?: number;
-      existing?: WatchRecord;
-      needsPayment?: boolean;
-    };
-    err.status = 402;
-    err.existing = gate.existing;
-    err.needsPayment = true;
-    throw err;
-  }
-
   const id = watchIdFromSourceUrl(normalized);
   const sourceHash = hashContent(fetched.text);
   const { title, events } = parseSourceText(fetched.text, now, {
@@ -186,7 +173,7 @@ export async function watchUrl(
   });
   const calName = fetched.title || title || "WatchCal";
   const ics = eventsToIcs(id, calName, events, now, normalized);
-  const watch = await saveWatch(
+  const created = await createWatchAtomic(
     {
       id,
       sourceUrl: normalized,
@@ -200,7 +187,18 @@ export async function watchUrl(
     },
     opts.dataPath
   );
-  return { watch, urls: feedPaths(watch.id, origin) };
+  if (!created.ok) {
+    const err = new Error(created.reason) as Error & {
+      status?: number;
+      existing?: WatchRecord;
+      needsPayment?: boolean;
+    };
+    err.status = 402;
+    err.existing = created.existing;
+    err.needsPayment = true;
+    throw err;
+  }
+  return { watch: created.watch, urls: feedPaths(created.watch.id, origin) };
 }
 
 export async function getFeedIcs(
