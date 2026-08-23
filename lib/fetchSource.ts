@@ -95,10 +95,16 @@ export async function fetchSource(
 
   if (looksPdf) {
     const text = await extractPdfText(raw);
+    let fileName = url.pathname.split("/").pop() || "PDF";
+    try {
+      fileName = decodeURIComponent(fileName);
+    } catch {
+      /* keep raw segment */
+    }
     return {
       contentType: "application/pdf",
       text,
-      title: url.pathname.split("/").pop() || "PDF",
+      title: fileName,
       raw,
     };
   }

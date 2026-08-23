@@ -48,7 +48,20 @@ function parseDateParts(
   return d;
 }
 
-type DateHit = { index: number; date: Date; raw: string; end: number };
+type DateHit = {
+  index: number;
+  date: Date;
+  raw: string;
+  end: number;
+  /** Inclusive last day when this hit is a written date range. */
+  endDate?: Date;
+};
+
+export type ParseSourceOptions = {
+  /** PDF filename, HTML <title>, or similar — used for document-year inheritance. */
+  sourceTitle?: string;
+  sourceUrl?: string;
+};
 
 /**
  * True when the digit before a month name is outline numbering (e.g. "1.1 January"),
@@ -62,7 +75,93 @@ function isOutlineNumbering(text: string, matchIndex: number): boolean {
   return false;
 }
 
-function findDates(text: string): DateHit[] {
+function decodeHint(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+function yearsIn(s: string): number[] {
+  const out: number[] = [];
+  const re = /\b((?:19|20)\d{2})\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    const y = Number(m[1]);
+    if (y >= 1900 && y <= 2100) out.push(y);
+  }
+  return out;
+}
+
+/**
+ * Document-level calendar year from title/filename/URL, or a clear in-document
+ * calendar label. Does not invent a year from a lone gazette date.
+ */
+function inferDocumentYear(
+  text: string,
+  opts?: ParseSourceOptions
+): number | null {
+  const hint = [opts?.sourceTitle, opts?.sourceUrl]
+    .filter(Boolean)
+    .map((s) => decodeHint(s as string))
+    .join(" ");
+  const fromHint = yearsIn(hint);
+  if (fromHint.length) return fromHint[fromHint.length - 1];
+
+  const head = text.slice(0, 1200);
+  const labelled =
+    head.match(/\b((?:19|20)\d{2})\s+calendar\b/i) ||
+    head.match(/\bcalendar\b[^\n]{0,40}?\b((?:19|20)\d{2})\b/i) ||
+    head.match(/\bholidays?\s+((?:19|20)\d{2})\b/i) ||
+    head.match(/\b((?:19|20)\d{2})\s+holidays?\b/i) ||
+    head.match(/\bschool\s+year\s+((?:19|20)\d{2})\b/i);
+  if (labelled) {
+    const y = Number(labelled[1]);
+    if (y >= 1900 && y <= 2100) return y;
+  }
+
+  // Explicit years already on the page: only when one year clearly dominates
+  // the header (avoids a single gazette date becoming the calendar year).
+  const counts = new Map<number, number>();
+  for (const y of yearsIn(head)) {
+    counts.set(y, (counts.get(y) || 0) + 1);
+  }
+  let best: number | null = null;
+  let bestN = 0;
+  for (const [y, n] of counts) {
+    if (n > bestN) {
+      best = y;
+      bestN = n;
+    }
+  }
+  if (best != null && bestN >= 2) return best;
+  return null;
+}
+
+/** Holiday / labelled day: month followed by a name (space optional: "JanuaryNew"). */
+function hasTrailingLabel(text: string, afterMonth: number): boolean {
+  return /^[A-Za-z]/.test(text.slice(afterMonth)) ||
+    /^[\s\u00a0]+[A-Za-z]/.test(text.slice(afterMonth));
+}
+
+function overlapsExisting(hits: DateHit[], index: number, end: number): boolean {
+  return hits.some((h) => index < h.end && end > h.index);
+}
+
+/** Day from "14" or term-glued "208" → 8; rejects years (4+ digits). */
+function dayFromPossibleGlue(raw: string): number | null {
+  if (!/^\d{1,3}$/.test(raw)) return null;
+  const n = Number(raw);
+  if (n >= 1 && n <= 31) return n;
+  if (raw.length === 3) {
+    const day = Number(raw.slice(1));
+    if (day >= 1 && day <= 31) return day;
+  }
+  return null;
+}
+
+function findDates(text: string, inheritYear: number | null): DateHit[] {
   const hits: DateHit[] = [];
   const patterns: Array<{
     re: RegExp;
@@ -129,13 +228,77 @@ function findDates(text: string): DateHit[] {
     }
   }
 
+  // Conservative year inheritance: written ranges + holiday lines only.
+  if (inheritYear != null) {
+    // "14 January – 27 March" / term-glued "208 April – 26 June" / "09 (11) December"
+    const rangeRe = new RegExp(
+      // (?![A-Za-z]) not \b: PDF glue like "March1153" has no word boundary before digits.
+      // Only treat spaced 19xx/20xx as an on-line year (not glued stats like "December 1047").
+      String.raw`(\d{1,3})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*[–—−-]\s*(\d{1,2})(?:\s*\(\d{1,2}\))?(?:st|nd|rd|th)?\s+(${MONTH_ALT})(?![A-Za-z])(?!\s+((?:19|20)\d{2})\b)`,
+      "gi"
+    );
+    let rm: RegExpExecArray | null;
+    while ((rm = rangeRe.exec(text)) !== null) {
+      const day1 = dayFromPossibleGlue(rm[1]);
+      if (day1 == null) continue;
+      // Align index to the day digits actually used (skip glued term index).
+      const dayToken = String(day1).padStart(rm[1].length <= 2 ? rm[1].length : 2, "0");
+      const dayOffset =
+        rm[1].length > 2 && Number(rm[1]) > 31 ? rm[1].length - dayToken.length : 0;
+      const index = rm.index + dayOffset;
+      if (isOutlineNumbering(text, index)) continue;
+      const end = rm.index + rm[0].length;
+      if (overlapsExisting(hits, index, end)) continue;
+      const m1 = MONTHS[rm[2].toLowerCase()];
+      const m2 = MONTHS[rm[4].toLowerCase()];
+      if (m1 == null || m2 == null) continue;
+      const start = parseDateParts(day1, m1, inheritYear);
+      const stop = parseDateParts(Number(rm[3]), m2, inheritYear);
+      if (!start || !stop) continue;
+      // Do not invent days; reject inverted ranges within the same year.
+      if (stop.getTime() < start.getTime()) continue;
+      const raw = text.slice(index, end);
+      hits.push({
+        index,
+        end,
+        date: start,
+        endDate: stop,
+        raw,
+      });
+    }
+
+    // "01 January New Year's Day" / "01 JanuaryNew Year's Day" — day+month+label, no year
+    const holidayRe = new RegExp(
+      String.raw`\b(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})(?!\s+((?:19|20)\d{2})\b)`,
+      "gi"
+    );
+    let hm: RegExpExecArray | null;
+    while ((hm = holidayRe.exec(text)) !== null) {
+      if (isOutlineNumbering(text, hm.index)) continue;
+      const end = hm.index + hm[0].length;
+      if (overlapsExisting(hits, hm.index, end)) continue;
+      if (!hasTrailingLabel(text, end)) continue;
+      const month = MONTHS[hm[2].toLowerCase()];
+      if (month == null) continue;
+      const date = parseDateParts(Number(hm[1]), month, inheritYear);
+      if (!date) continue;
+      hits.push({
+        index: hm.index,
+        end,
+        date,
+        raw: hm[0],
+      });
+    }
+  }
+
   hits.sort((a, b) => a.index - b.index);
   const out: DateHit[] = [];
   for (const h of hits) {
     const dup = out.find(
       (o) =>
         Math.abs(o.index - h.index) < 8 &&
-        o.date.toDateString() === h.date.toDateString()
+        o.date.toDateString() === h.date.toDateString() &&
+        (o.endDate?.toDateString() || "") === (h.endDate?.toDateString() || "")
     );
     if (!dup) out.push(h);
   }
@@ -167,7 +330,11 @@ function lineSummary(text: string, hit: DateHit): string | null {
     .slice(hit.end, lineEnd)
     .replace(/^[\s,;:\-\u2013\u2014–—]+/u, "")
     .trim();
-  if (afterDate.length >= 3 && !isChromeLine(afterDate)) {
+  // Range rows often glue digits after the end date ("27 March1153"); prefer the range raw.
+  if (hit.endDate && (!afterDate || /^\d/.test(afterDate))) {
+    return hit.raw.replace(/\s+/g, " ").trim().slice(0, 120);
+  }
+  if (afterDate.length >= 3 && !isChromeLine(afterDate) && !/^\d{2,}/.test(afterDate)) {
     return afterDate.slice(0, 120);
   }
 
@@ -239,19 +406,22 @@ function dropChromeLines(text: string): string {
 
 /**
  * Conservative dated-event extractor for HTML/PDF plain text.
- * Only emits events with an explicit calendar year (ISO, written, or numeric).
- * Never invents dates from outline numbers; never uses SUMMARY "Watched event".
- * Returns [] when no dated events are found.
+ * Year is required on the line, or inherited only for written date ranges and
+ * holiday lines when a document-level year is known (title, filename, or a
+ * clear calendar year already on the page). Never invents days from outline
+ * numbers; never uses SUMMARY "Watched event". Returns [] when none found.
  */
 export function parseSourceText(
   text: string,
-  _now: Date = new Date()
+  _now: Date = new Date(),
+  opts?: ParseSourceOptions
 ): { title: string; events: ParsedEvent[] } {
   const cleaned = dropChromeLines(text.replace(/\u00a0/g, " ").trim());
   const title = pageTitle(cleaned);
   if (!cleaned) return { title: "WatchCal feed", events: [] };
 
-  const dates = findDates(cleaned);
+  const inheritYear = inferDocumentYear(cleaned, opts);
+  const dates = findDates(cleaned, inheritYear);
   if (!dates.length) return { title, events: [] };
 
   const events: ParsedEvent[] = [];
@@ -263,7 +433,14 @@ export function parseSourceText(
       hit.date.getMonth(),
       hit.date.getDate()
     );
-    const end = new Date(start);
+    const last = hit.endDate
+      ? new Date(
+          hit.endDate.getFullYear(),
+          hit.endDate.getMonth(),
+          hit.endDate.getDate()
+        )
+      : start;
+    const end = new Date(last);
     end.setDate(end.getDate() + 1);
     events.push({
       summary,

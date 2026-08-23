@@ -113,6 +113,59 @@ describe("parseSource", () => {
       assert.doesNotMatch(e.description, /^(Log in|Contents|move to sidebar)/i);
     }
   });
+
+  it("inherits document year for DBE-style ranges and holiday lines", () => {
+    const text = [
+      "SUMMARY OF 2026 CALENDAR FOR PUBLIC SCHOOLS",
+      "Public and School Holidays 2026",
+      "01 JanuaryNew Year's Day",
+      "21 MarchHuman Rights Day",
+      "03 AprilGood Friday",
+      "1(12) 14 January – 27 March1153 (55)053 (55)",
+      "208 April – 26 June12583+154",
+      "406 October – 09 (11) December 1047 (49)047(49)",
+    ].join("\n");
+    const { events } = parseSourceText(text, new Date("2026-01-10T00:00:00Z"), {
+      sourceTitle: "Published 2026 School Calendar.pdf",
+      sourceUrl:
+        "https://www.education.gov.za/portals/0/documents/publications/2025/Published%202026%20School%20Calendar.pdf",
+    });
+    assert.ok(events.length >= 5, `expected several events, got ${events.length}`);
+    assert.ok(events.every((e) => e.summary !== "Watched event"));
+
+    const nye = events.find((e) => /New Year/i.test(e.summary));
+    assert.ok(nye, "New Year's Day");
+    assert.match(nye!.start, /^2026-01-01/);
+
+    const humanRights = events.find((e) => /Human Rights/i.test(e.summary));
+    assert.ok(humanRights);
+    assert.match(humanRights!.start, /^2026-03-21/);
+
+    const term1 = events.find(
+      (e) =>
+        e.start.startsWith("2026-01-14") &&
+        (e.end.startsWith("2026-03-28") || e.end.startsWith("2026-03-27"))
+    );
+    assert.ok(term1, "Term range 14 January – 27 March 2026");
+    // all-day exclusive end = day after 27 March
+    assert.match(term1!.end, /^2026-03-28/);
+
+    const term2 = events.find((e) => e.start.startsWith("2026-04-08"));
+    assert.ok(term2, "Term range 08 April – 26 June");
+    assert.match(term2!.end, /^2026-06-27/);
+
+    const term4 = events.find((e) => e.start.startsWith("2026-10-06"));
+    assert.ok(term4, "Term range 06 October – 09 December");
+    assert.match(term4!.end, /^2026-12-10/);
+  });
+
+  it("still requires a year somehow — bare day+month without document year yields nothing", () => {
+    const text = ["Club notes", "15 March Home vs North", "22 March Away"].join(
+      "\n"
+    );
+    const { events } = parseSourceText(text, new Date("2026-01-10T00:00:00Z"));
+    assert.equal(events.length, 0);
+  });
 });
 
 describe("deterministic watch ids", () => {
