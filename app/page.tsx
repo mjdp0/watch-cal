@@ -15,6 +15,30 @@ type WatchPayload = {
 /** Browser-only last-watch key — not a shareable product URL. */
 const LAST_WATCH_KEY = "watchcal:lastWatch";
 
+/** Live Western Cape feed id only — do not invent other feed ids. */
+const WESTERN_CAPE_FEED_ID =
+  "aHR0cHM6Ly93d3cud2VzdGVybmNhcGUuZ292LnphL2VkdWNhdGlvbi9zY2hvb2wtY2FsZW5kYXI";
+
+const EXAMPLES: {
+  label: string;
+  url: string;
+  feedId?: string;
+}[] = [
+  {
+    label: "School terms (Western Cape)",
+    url: "https://www.westerncape.gov.za/education/school-calendar",
+    feedId: WESTERN_CAPE_FEED_ID,
+  },
+  {
+    label: "School calendar (St Stithians)",
+    url: "https://www.stithian.com/uploads/files/St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf",
+  },
+  {
+    label: "NSC exams 2026",
+    url: "https://www.education.gov.za/LinkClick.aspx?fileticket=312B9JSmyzQ%3D&mid=4149&portalid=0&tabid=338",
+  },
+];
+
 type LastWatchStored = {
   id: string;
   title: string;
@@ -88,8 +112,10 @@ export default function HomePage() {
   const [needsExtraWatch, setNeedsExtraWatch] = useState(false);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [checkoutHint, setCheckoutHint] = useState<string | null>(null);
+  const [origin, setOrigin] = useState("https://watch-cal.vercel.app");
 
   useEffect(() => {
+    setOrigin(window.location.origin);
     const restored = readLastWatch(window.location.origin);
     if (!restored) return;
     setWatch(restored);
@@ -101,8 +127,7 @@ export default function HomePage() {
     writeLastWatch(next);
   }
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
+  async function createWatch(sourceUrl: string) {
     setBusy(true);
     setError(null);
     setWatch(null);
@@ -113,7 +138,7 @@ export default function HomePage() {
       const res = await fetch("/api/watches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: sourceUrl }),
       });
       const data = (await res.json()) as {
         success: boolean;
@@ -133,7 +158,7 @@ export default function HomePage() {
             https_url: data.payload.https_url,
             webcal_url: data.payload.webcal_url,
             download_url: data.payload.download_url,
-            source_url: url,
+            source_url: sourceUrl,
           });
         }
         setError(data.message);
@@ -156,6 +181,16 @@ export default function HomePage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    await createWatch(url);
+  }
+
+  function useExample(sourceUrl: string) {
+    setUrl(sourceUrl);
+    void createWatch(sourceUrl);
   }
 
   async function startExtraWatchCheckout() {
@@ -214,6 +249,37 @@ export default function HomePage() {
           </button>
         </div>
       </form>
+
+      <div className="examples">
+        <p className="examples-label">Examples</p>
+        <ul className="example-list">
+          {EXAMPLES.map((example) => {
+            const feedLinks = example.feedId
+              ? linksForId(example.feedId, origin)
+              : null;
+            return (
+              <li key={example.url}>
+                <button
+                  type="button"
+                  className="example"
+                  disabled={busy}
+                  onClick={() => useExample(example.url)}
+                >
+                  {example.label}
+                </button>
+                {feedLinks && (
+                  <p className="example-feed">
+                    Already live:{" "}
+                    <a href={feedLinks.webcal_url}>webcal</a>
+                    {" · "}
+                    <a href={feedLinks.https_url}>https .ics</a>
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
 
       {error && <p className="error">{error}</p>}
 
@@ -280,10 +346,8 @@ export default function HomePage() {
       )}
 
       <p className="note">
-        Free path: <strong>1 free watch</strong>, no login. Extra watched URLs
-        are pay-once Polar credits (one credit = one extra URL), not billed
-        SaaS. Refresh happens when calendars poll the feed (and via optional
-        daily cron). Not a paste-box demo — the product is the hosted poll URL.
+        First watch is free. Extra watches are pay-once Polar ($5), one credit
+        per URL — not billed SaaS.
       </p>
     </main>
   );

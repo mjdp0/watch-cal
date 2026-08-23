@@ -69,6 +69,53 @@ main {
   animation: rise 0.7s ease 0.16s both;
 }
 
+.examples {
+  margin-top: 1.25rem;
+  animation: rise 0.7s ease 0.2s both;
+}
+
+.examples-label {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.example-list {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+button.example {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: var(--accent-deep);
+  border: 1px solid var(--line);
+  font-weight: 600;
+  padding: 0.7rem 0.9rem;
+}
+
+button.example:hover {
+  background: rgba(13, 110, 90, 0.08);
+}
+
+.example-feed {
+  margin: 0.35rem 0 0 0.15rem;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.example-feed a {
+  text-underline-offset: 2px;
+}
+
 .form label {
   font-size: 0.85rem;
   font-weight: 600;
