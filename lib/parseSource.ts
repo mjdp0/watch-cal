@@ -337,8 +337,24 @@ function isJunkSummary(s: string): boolean {
 }
 
 /**
+ * Western Cape dual open/close markers: "(1) for Educators" / "(2) for Learners".
+ * Only used when (1)/(2) sits on the same Opens/Closes line after a date.
+ */
+function termAudienceLabel(text: string, hit: DateHit): string | null {
+  const lineEndIdx = text.indexOf("\n", hit.end);
+  const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx;
+  const after = text.slice(hit.end, lineEnd);
+  const mark = after.match(/^\s*\((\d+)\)/);
+  if (!mark) return null;
+  if (mark[1] === "1") return "staff"; // source: Educators
+  if (mark[1] === "2") return "learners";
+  return null;
+}
+
+/**
  * Western Cape–style lists: "First" / "Opens: 14 January 2026" / "Closes: …"
- * → "Term 1 opens". Looks only at a few preceding lines.
+ * → "Term 1 opens". Dual (1)/(2) dates → "Term 1 opens (staff|learners)".
+ * Looks only at a few preceding lines; does not reopen junk-parse.
  */
 function termBoundSummary(text: string, hit: DateHit): string | null {
   const lineStart = text.lastIndexOf("\n", hit.index) + 1;
@@ -354,23 +370,33 @@ function termBoundSummary(text: string, hit: DateHit): string | null {
     .split(/\r?\n/)
     .map((l) => l.replace(/\s+/g, " ").trim())
     .filter((l) => l && !isChromeLine(l));
+  let termN: number | null = null;
   for (let i = prev.length - 1; i >= Math.max(0, prev.length - 8); i--) {
     const t = prev[i];
     if (/^(opens|closes)\b/i.test(t)) continue;
     const ord = t.match(/^(first|second|third|fourth)\b/i);
     if (ord) {
       const n = TERM_ORDINAL[ord[1].toLowerCase()];
-      if (n) return `Term ${n} ${verb}`;
+      if (n) {
+        termN = n;
+        break;
+      }
     }
     const tm = t.match(/^terms?\s+(\d+|one|two|three|four)\b/i);
     if (tm) {
       const g = tm[1].toLowerCase();
       const n = /^\d+$/.test(g) ? Number(g) : TERM_ORDINAL[g];
-      if (n && n >= 1 && n <= 4) return `Term ${n} ${verb}`;
+      if (n && n >= 1 && n <= 4) {
+        termN = n;
+        break;
+      }
     }
   }
   // Opens/Closes without a term heading — drop rather than emit bare verb.
-  return null;
+  if (termN == null) return null;
+  const audience = termAudienceLabel(text, hit);
+  if (audience) return `Term ${termN} ${verb} (${audience})`;
+  return `Term ${termN} ${verb}`;
 }
 
 /**

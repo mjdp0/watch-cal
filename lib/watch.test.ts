@@ -113,7 +113,7 @@ describe("homepage examples and copy", () => {
     assert.match(page, /feedId: WESTERN_CAPE_FEED_ID/);
   });
 
-  it("copy invites a public https link, not upload or screenshot paste", async () => {
+  it("copy invites a public https link; dates land in the phone calendar", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
@@ -124,6 +124,9 @@ describe("homepage examples and copy", () => {
     );
     assert.match(page, /public https link \(page or PDF URL\)/i);
     assert.match(page, /Public https link/);
+    assert.match(page, /dates land in your phone\s*calendar/i);
+    assert.match(page, /stay updated/i);
+    assert.doesNotMatch(page, /\bpoll\b/i);
     assert.doesNotMatch(page, /Paste a public page or PDF(?! URL)/i);
     assert.doesNotMatch(page, /photo OCR|type=["']file["']/i);
     assert.match(page, /onPaste=\{onUrlPaste\}/);
@@ -132,9 +135,41 @@ describe("homepage examples and copy", () => {
       /Use a public https link to a page or PDF — not a screenshot or photo/
     );
     assert.match(layout, /public https link \(page or PDF URL\)/i);
+    assert.match(layout, /dates land in your phone calendar/i);
     // Single URL text field only
     assert.equal((page.match(/type="url"/g) || []).length, 1);
     assert.doesNotMatch(page, /type=["']file["']/);
+  });
+
+  it("after extra preview, shows Polar pay-once checkout CTA (no dead-end)", async () => {
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.match(page, /setPreview\(data\.payload\)/);
+    assert.match(page, /setNeedsExtraWatch\(true\)/);
+    assert.match(page, /preview-checkout|preview && \([\s\S]*Pay once for one extra watch/);
+    assert.match(page, /First watch stays free/);
+    assert.match(page, /\$5 one-time/);
+    assert.match(page, /startExtraWatchCheckout/);
+    assert.match(page, /\/api\/polar\/checkout/);
+    // Preview path must not mint a watch
+    assert.match(
+      page,
+      /never POST \/api\/watches|Extra examples dry-run/i
+    );
+  });
+
+  it("successful watch shows parent-facing checked / last-changed freshness", async () => {
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.match(page, /last_fetched_at/);
+    assert.match(page, /last_changed_at/);
+    assert.match(page, /Checked just now/);
+    assert.match(page, /Updated when the school page last changed/);
+    assert.match(page, /parentRelativeTime|freshness/);
   });
 });
 
@@ -291,12 +326,13 @@ describe("parseSource", () => {
     assert.equal(events.length, 0);
   });
 
-  it("titles Western Cape Opens/Closes rows as Term N opens/closes", () => {
+  it("titles Western Cape Opens/Closes rows as Term N opens/closes; dual (1)/(2) labelled staff vs learners", () => {
     // Mirrors https://www.westerncape.gov.za/education/school-calendar structure:
-    // ordinal heading + Opens/Closes list items (incl. dual (1)/(2) dates).
+    // (1) Educators / (2) Learners + ordinal heading + Opens/Closes (incl. dual dates).
     const html = `
       <html><head><title>School Calendar | Western Cape Government</title></head>
       <body>
+        <p><strong>(1) for Educators</strong><br><strong>(2) for Learners</strong></p>
         <p><strong>Terms (All Provinces)</strong></p>
         <p><strong>First</strong></p>
         <ul>
@@ -335,15 +371,28 @@ describe("parseSource", () => {
       assert.doesNotMatch(e.summary, /^\(\d+\)/);
     }
 
-    const term1Open = events.filter(
-      (e) => e.summary === "Term 1 opens" && /^2026-01-(12|14)/.test(e.start)
+    // Dual Term 1 opens must not share one identical title in a phone calendar.
+    const term1Staff = events.find(
+      (e) =>
+        e.summary === "Term 1 opens (staff)" && e.start.startsWith("2026-01-12")
     );
-    assert.equal(term1Open.length, 2, "dual Term 1 open dates");
+    const term1Learners = events.find(
+      (e) =>
+        e.summary === "Term 1 opens (learners)" &&
+        e.start.startsWith("2026-01-14")
+    );
+    assert.ok(term1Staff, "12 Jan = educators/staff");
+    assert.ok(term1Learners, "14 Jan = learners");
+    assert.equal(
+      events.filter((e) => e.summary === "Term 1 opens").length,
+      0,
+      "dual opens must be labelled, not bare Term 1 opens ×2"
+    );
 
     const term1Close = events.find(
       (e) => e.summary === "Term 1 closes" && e.start.startsWith("2026-03-27")
     );
-    assert.ok(term1Close);
+    assert.ok(term1Close, "single close stays unlabelled");
 
     assert.ok(
       events.some(
@@ -370,11 +419,23 @@ describe("parseSource", () => {
         (e) => e.summary === "Term 4 opens" && e.start.startsWith("2026-10-06")
       )
     );
-    const term4Close = events.filter(
+    const term4Learners = events.find(
       (e) =>
-        e.summary === "Term 4 closes" && /^2026-12-(09|11)/.test(e.start)
+        e.summary === "Term 4 closes (learners)" &&
+        e.start.startsWith("2026-12-09")
     );
-    assert.equal(term4Close.length, 2, "dual Term 4 close dates");
+    const term4Staff = events.find(
+      (e) =>
+        e.summary === "Term 4 closes (staff)" &&
+        e.start.startsWith("2026-12-11")
+    );
+    assert.ok(term4Learners, "9 Dec = learners (2)");
+    assert.ok(term4Staff, "11 Dec = staff (1)");
+    assert.equal(
+      events.filter((e) => e.summary === "Term 4 closes").length,
+      0,
+      "dual closes must be labelled"
+    );
 
     const nye = events.find((e) => /New Year/i.test(e.summary));
     assert.ok(nye, "named public holidays stay named");
@@ -525,6 +586,18 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
     assert.ok(refreshed.events.length >= 1);
     assert.match(refreshed.ics, /Term B|May 2026|12 May/);
     assert.doesNotMatch(refreshed.ics, /Term A 10 April/);
+
+    // Unchanged source: lastFetchedAt moves, last-changed (updatedAt) does not.
+    const changedAt = refreshed.updatedAt;
+    const fetchedAgain = await refreshWatch(watch.id, {
+      dataPath,
+      fetcher,
+      force: true,
+      now: new Date("2026-01-06T01:00:00Z"),
+    });
+    assert.equal(fetchedAgain.sourceHash, refreshed.sourceHash);
+    assert.equal(fetchedAgain.updatedAt, changedAt);
+    assert.equal(fetchedAgain.lastFetchedAt, "2026-01-06T01:00:00.000Z");
   });
 
   it("serves text/calendar after the store is wiped (cold start)", async () => {

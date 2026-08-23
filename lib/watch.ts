@@ -128,6 +128,8 @@ export async function refreshWatch(
   const calName = fetched.title || title || "WatchCal";
   const ics = eventsToIcs(watch.id, calName, events, now, watch.sourceUrl);
 
+  const contentChanged =
+    watch.sourceHash == null || watch.sourceHash !== sourceHash;
   const updated: WatchRecord = {
     ...watch,
     title: calName,
@@ -135,7 +137,8 @@ export async function refreshWatch(
     ics,
     sourceHash,
     lastFetchedAt: now.toISOString(),
-    updatedAt: now.toISOString(),
+    // Only bump when the school page body actually changed.
+    updatedAt: contentChanged ? now.toISOString() : watch.updatedAt,
   };
   return saveWatch(updated, opts.dataPath);
 }

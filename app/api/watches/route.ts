@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
         title: watch.title,
         event_count: watch.events.length,
         source_hash: watch.sourceHash,
+        last_fetched_at: watch.lastFetchedAt,
+        last_changed_at: watch.updatedAt,
       },
     });
   } catch (err: unknown) {

@@ -10,6 +10,8 @@ type WatchPayload = {
   webcal_url: string;
   download_url: string;
   source_url: string;
+  last_fetched_at?: string | null;
+  last_changed_at?: string | null;
 };
 
 /** Browser-only last-watch key — not a shareable product URL. */
@@ -51,6 +53,8 @@ type LastWatchStored = {
   title: string;
   event_count: number;
   source_url: string;
+  last_fetched_at?: string | null;
+  last_changed_at?: string | null;
 };
 
 function linksForId(id: string, origin: string) {
@@ -75,6 +79,8 @@ function hydrateLastWatch(
     title: stored.title,
     event_count: stored.event_count,
     source_url: stored.source_url,
+    last_fetched_at: stored.last_fetched_at ?? null,
+    last_changed_at: stored.last_changed_at ?? null,
     ...linksForId(stored.id, origin),
   };
 }
@@ -92,6 +98,14 @@ function readLastWatch(origin: string): WatchPayload | null {
         event_count:
           typeof data.event_count === "number" ? data.event_count : 0,
         source_url: typeof data.source_url === "string" ? data.source_url : "",
+        last_fetched_at:
+          typeof data.last_fetched_at === "string"
+            ? data.last_fetched_at
+            : null,
+        last_changed_at:
+          typeof data.last_changed_at === "string"
+            ? data.last_changed_at
+            : null,
       },
       origin
     );
@@ -106,8 +120,41 @@ function writeLastWatch(watch: WatchPayload) {
     title: watch.title,
     event_count: watch.event_count,
     source_url: watch.source_url,
+    last_fetched_at: watch.last_fetched_at ?? null,
+    last_changed_at: watch.last_changed_at ?? null,
   };
   localStorage.setItem(LAST_WATCH_KEY, JSON.stringify(stored));
+}
+
+/** Parent-facing relative time for last check / last change. */
+function parentRelativeTime(iso: string | null | undefined, kind: "checked" | "changed"): string {
+  if (!iso) {
+    return kind === "checked"
+      ? "Not checked yet"
+      : "Updated when the school page last changed";
+  }
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0 || ms < 60_000) {
+    return kind === "checked"
+      ? "Checked just now"
+      : "Updated when the school page last changed";
+  }
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) {
+    return kind === "checked"
+      ? `Checked ${mins} minute${mins === 1 ? "" : "s"} ago`
+      : `Last changed ${mins} minute${mins === 1 ? "" : "s"} ago`;
+  }
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) {
+    return kind === "checked"
+      ? `Checked ${hours} hour${hours === 1 ? "" : "s"} ago`
+      : `Last changed ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+  const days = Math.floor(hours / 24);
+  return kind === "checked"
+    ? `Checked ${days} day${days === 1 ? "" : "s"} ago`
+    : `Last changed ${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 export default function HomePage() {
@@ -178,7 +225,11 @@ export default function HomePage() {
         }
         return;
       }
-      rememberWatch(data.payload);
+      rememberWatch({
+        ...data.payload,
+        last_fetched_at: data.payload.last_fetched_at ?? null,
+        last_changed_at: data.payload.last_changed_at ?? null,
+      });
       if (data.payload.event_count === 0) {
         setError(
           "No dated events found on that page. Feeds only include lines with a real calendar date (day, month, and year)."
@@ -250,6 +301,8 @@ export default function HomePage() {
         return;
       }
       setPreview(data.payload);
+      // Extra dry-run succeeded — offer the real pay-once path (no mint yet).
+      setNeedsExtraWatch(true);
     } catch {
       setPreviewError("Could not preview URL");
     } finally {
@@ -305,9 +358,8 @@ export default function HomePage() {
     <main>
       <h1 className="brand">WatchCal</h1>
       <p className="lede">
-        Enter a public https link (page or PDF URL) that changes. Get one
-        stable calendar subscribe URL that Apple and Google already know how
-        to poll.
+        Enter a public https link (page or PDF URL). The dates land in your phone
+        calendar and stay updated when the school page changes.
       </p>
 
       <form className="form" onSubmit={onSubmit}>
@@ -377,10 +429,28 @@ export default function HomePage() {
               untouched)
             </p>
           )}
+          {preview && (
+            <div className="pay-once preview-checkout">
+              <p>
+                First watch stays free. This extra calendar is $5 one-time —
+                pay once, then tap Create watch to subscribe.
+              </p>
+              <button
+                type="button"
+                onClick={startExtraWatchCheckout}
+                disabled={checkoutBusy}
+              >
+                {checkoutBusy
+                  ? "Opening checkout…"
+                  : "Pay once for one extra watch"}
+              </button>
+              {checkoutHint && <p className="error">{checkoutHint}</p>}
+            </div>
+          )}
         </section>
       )}
 
-      {needsExtraWatch && (
+      {needsExtraWatch && !preview && (
         <div className="pay-once">
           <p>
             One free watch is already on this instance. Pay once for one extra
@@ -438,6 +508,11 @@ export default function HomePage() {
           <p className="meta">
             {watch.title} · {watch.event_count} event
             {watch.event_count === 1 ? "" : "s"} · id {watch.id}
+          </p>
+          <p className="meta freshness">
+            {parentRelativeTime(watch.last_fetched_at, "checked")}
+            {" · "}
+            {parentRelativeTime(watch.last_changed_at, "changed")}
           </p>
         </section>
       )}

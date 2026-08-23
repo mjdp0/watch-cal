@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "WatchCal",
   description:
-    "Enter a public https link (page or PDF URL). Get one stable webcal feed that updates when the source changes.",
+    "Enter a public https link (page or PDF URL). The dates land in your phone calendar and stay updated when the school page changes.",
 };
 
 export default function RootLayout({
