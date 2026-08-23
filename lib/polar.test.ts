@@ -99,6 +99,49 @@ describe("polar pay-once credits", { concurrency: false }, () => {
     );
     assert.ok(watch.id);
   });
+
+  it("rejects parallel second watches without a credit (no TOCTOU 200s)", async () => {
+    const racePath = path.join(
+      await mkdtemp(path.join(tmpdir(), "watchcal-race-")),
+      "watches.json"
+    );
+    sourceBody =
+      "<html><title>Race</title><body><p>Day 12 June 2026</p></body></html>";
+    const urls = [
+      "https://example.com/race-a",
+      "https://example.com/race-b",
+      "https://example.com/race-c",
+      "https://example.com/race-d",
+    ];
+    const results = await Promise.all(
+      urls.map(async (url) => {
+        try {
+          const { watch } = await watchUrl(url, "https://watchcal.example", {
+            dataPath: racePath,
+            fetcher,
+            now: new Date("2026-01-07T00:00:00Z"),
+          });
+          return { ok: true as const, id: watch.id };
+        } catch (err: unknown) {
+          const e = err as Error & { status?: number; needsPayment?: boolean };
+          return {
+            ok: false as const,
+            status: e.status,
+            needsPayment: e.needsPayment,
+          };
+        }
+      })
+    );
+    const created = results.filter((r) => r.ok);
+    const blocked = results.filter((r) => !r.ok);
+    assert.equal(created.length, 1, "only the free slot may succeed");
+    assert.equal(blocked.length, urls.length - 1);
+    for (const b of blocked) {
+      assert.equal(b.status, 402);
+      assert.equal(b.needsPayment, true);
+    }
+    await rm(path.dirname(racePath), { recursive: true, force: true });
+  });
 });
 
 describe("polar checkout + webhook helpers", () => {

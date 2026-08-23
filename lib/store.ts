@@ -1,10 +1,13 @@
 import { createHash } from "crypto";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, open, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
 import type { WatchRecord, WatchStoreFile } from "./types";
 
 /** Max watches on the free (no-login) path. */
 export const FREE_WATCH_LIMIT = 1;
+
+/** In-process mutex per data file so concurrent POSTs cannot race the quota check. */
+const storeChains = new Map<string, Promise<unknown>>();
 
 function defaultDataPath(): string {
   if (process.env.WATCHCAL_DATA_PATH) return process.env.WATCHCAL_DATA_PATH;
@@ -43,6 +46,54 @@ async function readStore(filePath: string): Promise<WatchStoreFile> {
 async function writeStore(filePath: string, store: WatchStoreFile): Promise<void> {
   await ensureParent(filePath);
   await writeFile(filePath, JSON.stringify(store, null, 2) + "\n", "utf8");
+}
+
+/**
+ * Serialize store mutations (in-process queue + exclusive lockfile).
+ * Prevents TOCTOU where two POSTs both pass canCreateWatch then both save.
+ */
+async function withStoreLock<T>(
+  filePath: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const prev = storeChains.get(filePath) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const chained = prev.then(
+    () => gate,
+    () => gate
+  );
+  storeChains.set(filePath, chained);
+
+  await prev.catch(() => {});
+
+  const lockPath = `${filePath}.lock`;
+  await ensureParent(filePath);
+  let lockHandle: Awaited<ReturnType<typeof open>> | null = null;
+  const started = Date.now();
+  while (!lockHandle) {
+    try {
+      lockHandle = await open(lockPath, "wx");
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code !== "EEXIST") throw err;
+      if (Date.now() - started > 10_000) {
+        throw new Error("Timed out waiting for watch store lock");
+      }
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  }
+
+  try {
+    return await fn();
+  } finally {
+    await lockHandle.close().catch(() => {});
+    await unlink(lockPath).catch(() => {});
+    release();
+    if (storeChains.get(filePath) === chained) storeChains.delete(filePath);
+  }
 }
 
 /**
@@ -101,12 +152,14 @@ export async function saveWatch(
   watch: WatchRecord,
   dataPath: string = defaultDataPath()
 ): Promise<WatchRecord> {
-  const store = await readStore(dataPath);
-  const idx = store.watches.findIndex((w) => w.id === watch.id);
-  if (idx >= 0) store.watches[idx] = watch;
-  else store.watches.push(watch);
-  await writeStore(dataPath, store);
-  return watch;
+  return withStoreLock(dataPath, async () => {
+    const store = await readStore(dataPath);
+    const idx = store.watches.findIndex((w) => w.id === watch.id);
+    if (idx >= 0) store.watches[idx] = watch;
+    else store.watches.push(watch);
+    await writeStore(dataPath, store);
+    return watch;
+  });
 }
 
 export async function getExtraWatchCredits(
@@ -122,6 +175,10 @@ export async function maxWatchSlots(
   return FREE_WATCH_LIMIT + (await getExtraWatchCredits(dataPath));
 }
 
+function quotaBlockedReason(): string {
+  return `Free path allows ${FREE_WATCH_LIMIT} watch. Pay once for one extra watched URL, or refresh/reuse the existing feed.`;
+}
+
 /**
  * Grant one pay-once extra-watch credit (idempotent per eventId).
  */
@@ -129,17 +186,19 @@ export async function grantExtraWatchCredit(
   eventId: string,
   dataPath: string = defaultDataPath()
 ): Promise<{ granted: boolean; credits: number }> {
-  const store = await readStore(dataPath);
-  const grantedIds = store.grantedEventIds ?? [];
-  if (eventId && grantedIds.includes(eventId)) {
-    return { granted: false, credits: store.extraWatchCredits ?? 0 };
-  }
-  if (eventId) grantedIds.push(eventId);
-  const credits = (store.extraWatchCredits ?? 0) + 1;
-  store.extraWatchCredits = credits;
-  store.grantedEventIds = grantedIds;
-  await writeStore(dataPath, store);
-  return { granted: true, credits };
+  return withStoreLock(dataPath, async () => {
+    const store = await readStore(dataPath);
+    const grantedIds = store.grantedEventIds ?? [];
+    if (eventId && grantedIds.includes(eventId)) {
+      return { granted: false, credits: store.extraWatchCredits ?? 0 };
+    }
+    if (eventId) grantedIds.push(eventId);
+    const credits = (store.extraWatchCredits ?? 0) + 1;
+    store.extraWatchCredits = credits;
+    store.grantedEventIds = grantedIds;
+    await writeStore(dataPath, store);
+    return { granted: true, credits };
+  });
 }
 
 export async function canCreateWatch(
@@ -154,11 +213,47 @@ export async function canCreateWatch(
   if (all.length >= max) {
     return {
       ok: false,
-      reason: `Free path allows ${FREE_WATCH_LIMIT} watch. Pay once for one extra watched URL, or refresh/reuse the existing feed.`,
+      reason: quotaBlockedReason(),
       existing: all[0],
     };
   }
   return { ok: true };
+}
+
+export type CreateWatchResult =
+  | { ok: true; watch: WatchRecord }
+  | { ok: false; reason: string; existing?: WatchRecord };
+
+/**
+ * Insert a new watch under lock: re-check quota in the same critical section as write.
+ * Same-id upserts are allowed (refresh / rebuild). Over-quota new URLs are rejected.
+ */
+export async function createWatchAtomic(
+  watch: WatchRecord,
+  dataPath: string = defaultDataPath()
+): Promise<CreateWatchResult> {
+  return withStoreLock(dataPath, async () => {
+    const store = await readStore(dataPath);
+    const idx = store.watches.findIndex((w) => w.id === watch.id);
+    if (idx >= 0) {
+      store.watches[idx] = watch;
+      await writeStore(dataPath, store);
+      return { ok: true, watch };
+    }
+
+    const max = FREE_WATCH_LIMIT + (Number(store.extraWatchCredits) || 0);
+    if (store.watches.length >= max) {
+      return {
+        ok: false,
+        reason: quotaBlockedReason(),
+        existing: store.watches[0],
+      };
+    }
+
+    store.watches.push(watch);
+    await writeStore(dataPath, store);
+    return { ok: true, watch };
+  });
 }
 
 export { defaultDataPath };
