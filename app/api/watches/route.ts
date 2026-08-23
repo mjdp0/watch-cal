@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertPublicHttpUrl } from "@/lib/fetchSource";
+import { createPolarCheckout } from "@/lib/polar";
 import { feedPaths, watchUrl } from "@/lib/watch";
 
 function originFrom(req: NextRequest): string {
@@ -36,12 +37,34 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    const e = err as Error & { status?: number; existing?: { id: string } };
+    const e = err as Error & {
+      status?: number;
+      existing?: { id: string };
+      needsPayment?: boolean;
+    };
     const status = e.status || 400;
-    const payload =
+    const origin = originFrom(req);
+    const payload: Record<string, unknown> =
       e.existing != null
-        ? { existing_id: e.existing.id, ...feedPaths(e.existing.id, originFrom(req)) }
+        ? { existing_id: e.existing.id, ...feedPaths(e.existing.id, origin) }
         : {};
+
+    if (e.needsPayment || status === 402) {
+      try {
+        const checkout = await createPolarCheckout();
+        payload.checkout_url = checkout.checkout_url;
+        if (!checkout.configured) {
+          payload.checkout_message = checkout.message;
+        }
+      } catch (checkoutErr: unknown) {
+        payload.checkout_url = null;
+        payload.checkout_message =
+          checkoutErr instanceof Error
+            ? checkoutErr.message
+            : "checkout not configured";
+      }
+    }
+
     return NextResponse.json(
       { success: false, message: e.message || "Failed to create watch", payload },
       { status }

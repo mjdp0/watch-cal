@@ -215,6 +215,20 @@ button.copy:hover {
   font-weight: 600;
 }
 
+.pay-once {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  animation: rise 0.45s ease both;
+}
+
+.pay-once p {
+  margin: 0 0 0.85rem;
+  color: var(--ink-soft);
+  max-width: 34rem;
+  line-height: 1.45;
+}
+
 .note {
   margin-top: 3rem;
   font-size: 0.9rem;

@@ -344,8 +344,9 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
     } catch (err: unknown) {
       threw = true;
       const e = err as Error & { status?: number };
-      assert.equal(e.status, 403);
-      assert.match(e.message, /1 watch|one watch/i);
+      assert.equal(e.status, 402);
+      assert.equal(e.needsPayment, true);
+      assert.match(e.message, /1 watch|one watch|extra watched URL/i);
     }
     assert.equal(threw, true);
   });

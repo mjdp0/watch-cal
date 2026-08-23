@@ -170,9 +170,11 @@ export async function watchUrl(
     const err = new Error(gate.reason) as Error & {
       status?: number;
       existing?: WatchRecord;
+      needsPayment?: boolean;
     };
-    err.status = 403;
+    err.status = 402;
     err.existing = gate.existing;
+    err.needsPayment = true;
     throw err;
   }
 
