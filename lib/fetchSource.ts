@@ -9,6 +9,18 @@ export type FetchedSource = {
 
 const MAX_BYTES = 4 * 1024 * 1024;
 
+const IMAGE_PATH_RE = /\.(png|jpe?g|gif|webp)$/i;
+
+/** Shared client + API wording — public https link only, not a screenshot. */
+export const IMAGE_SOURCE_REJECTED =
+  "Image URLs are not supported. Use a public https link to a page or PDF — not a screenshot or photo.";
+
+function rejectImageSource(): never {
+  const err = new Error(IMAGE_SOURCE_REJECTED) as Error & { status?: number };
+  err.status = 400;
+  throw err;
+}
+
 export function assertPublicHttpUrl(raw: string): URL {
   let url: URL;
   try {
@@ -18,6 +30,9 @@ export function assertPublicHttpUrl(raw: string): URL {
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Only http(s) URLs are supported");
+  }
+  if (IMAGE_PATH_RE.test(url.pathname)) {
+    rejectImageSource();
   }
   const host = url.hostname.toLowerCase();
   if (
@@ -82,12 +97,16 @@ export async function fetchSource(
     err.status = 422;
     throw err;
   }
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  // Extension-less screenshot URLs still arrive as image/* — reject before minting.
+  if (contentType.startsWith("image/")) {
+    rejectImageSource();
+  }
   const ab = await res.arrayBuffer();
   if (ab.byteLength > MAX_BYTES) {
     throw new Error("Source is larger than 4MB");
   }
   const raw = Buffer.from(ab);
-  const contentType = (res.headers.get("content-type") || "").toLowerCase();
   const looksPdf =
     contentType.includes("application/pdf") ||
     url.pathname.toLowerCase().endsWith(".pdf") ||

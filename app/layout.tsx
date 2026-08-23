@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "WatchCal",
   description:
-    "Paste a public page or PDF URL. Get one stable webcal feed that updates when the source changes.",
+    "Enter a public https link (page or PDF URL). Get one stable webcal feed that updates when the source changes.",
 };
 
 export default function RootLayout({

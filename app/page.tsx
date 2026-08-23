@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { ClipboardEvent, FormEvent, useEffect, useState } from "react";
 
 type WatchPayload = {
   id: string;
@@ -150,23 +150,19 @@ export default function HomePage() {
         };
       };
       if (!data.success) {
-        if (data.payload?.https_url) {
-          rememberWatch({
-            id: data.payload.existing_id || data.payload.id,
-            title: "Existing watch",
-            event_count: 0,
-            https_url: data.payload.https_url,
-            webcal_url: data.payload.webcal_url,
-            download_url: data.payload.download_url,
-            source_url: sourceUrl,
-          });
-        }
-        setError(data.message);
+        // Do not hydrate the free watch's feed under a different URL — that
+        // looks like a failed parse of the example the user just tried.
         if (res.status === 402 || res.status === 403) {
           setNeedsExtraWatch(true);
+          setError(
+            data.message ||
+              "This URL needs a pay-once extra watch. One free watch is already on this instance."
+          );
           if (data.payload?.checkout_message) {
             setCheckoutHint(data.payload.checkout_message);
           }
+        } else {
+          setError(data.message);
         }
         return;
       }
@@ -188,9 +184,48 @@ export default function HomePage() {
     await createWatch(url);
   }
 
-  function useExample(sourceUrl: string) {
-    setUrl(sourceUrl);
-    void createWatch(sourceUrl);
+  function onUrlPaste(e: ClipboardEvent<HTMLInputElement>) {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    for (const item of Array.from(cd.items)) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        setError(
+          "Use a public https link to a page or PDF — not a screenshot or photo."
+        );
+        setNeedsExtraWatch(false);
+        setCheckoutHint(null);
+        return;
+      }
+    }
+    const text = (cd.getData("text") || "").trim();
+    if (
+      text.startsWith("data:") ||
+      text.startsWith("blob:") ||
+      (/^[a-z][a-z0-9+.-]*:/i.test(text) && !/^https?:\/\//i.test(text))
+    ) {
+      e.preventDefault();
+      setError(
+        "Use a public https link to a page or PDF — not a screenshot or photo."
+      );
+      setNeedsExtraWatch(false);
+      setCheckoutHint(null);
+    }
+  }
+
+  function useExample(example: (typeof EXAMPLES)[number]) {
+    setUrl(example.url);
+    // First/free example may create a watch. Extra examples only fill the
+    // field — auto-POST would 402 and look like a failed parse.
+    if (example.feedId) {
+      void createWatch(example.url);
+      return;
+    }
+    setWatch(null);
+    setError(null);
+    setNeedsExtraWatch(false);
+    setCheckoutHint(null);
+    setCopied(null);
   }
 
   async function startExtraWatchCheckout() {
@@ -228,12 +263,13 @@ export default function HomePage() {
     <main>
       <h1 className="brand">WatchCal</h1>
       <p className="lede">
-        Paste a public page or PDF that changes. Get one stable calendar
-        subscribe URL that Apple and Google already know how to poll.
+        Enter a public https link (page or PDF URL) that changes. Get one
+        stable calendar subscribe URL that Apple and Google already know how
+        to poll.
       </p>
 
       <form className="form" onSubmit={onSubmit}>
-        <label htmlFor="source">Public URL</label>
+        <label htmlFor="source">Public https link</label>
         <div className="row">
           <input
             id="source"
@@ -242,6 +278,7 @@ export default function HomePage() {
             placeholder="https://school.example/term-dates"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
+            onPaste={onUrlPaste}
             disabled={busy}
           />
           <button type="submit" disabled={busy}>
@@ -263,9 +300,12 @@ export default function HomePage() {
                   type="button"
                   className="example"
                   disabled={busy}
-                  onClick={() => useExample(example.url)}
+                  onClick={() => useExample(example)}
                 >
                   {example.label}
+                  {!example.feedId && (
+                    <span className="example-extra"> Extra / $5</span>
+                  )}
                 </button>
                 {feedLinks && (
                   <p className="example-feed">
