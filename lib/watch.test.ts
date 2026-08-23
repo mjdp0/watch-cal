@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -175,6 +175,49 @@ describe("deterministic watch ids", () => {
     assert.equal(watchIdFromSourceUrl(url), id);
     assert.equal(sourceUrlFromWatchId(id), new URL(url).toString());
     assert.equal(sourceUrlFromWatchId(id + ".ics"), new URL(url).toString());
+  });
+});
+
+describe("last watch browser restore", () => {
+  it("rebuilds clickable webcal + https hrefs from a stored id", () => {
+    const source_url = "https://school.example/terms";
+    const id = watchIdFromSourceUrl(source_url);
+    const stored = {
+      id,
+      title: "School terms",
+      event_count: 2,
+      source_url,
+    };
+    // Same hydrate path the homepage uses after localStorage read
+    const restored = { ...stored, ...feedPaths(stored.id, "https://watch-cal.vercel.app") };
+    assert.equal(
+      restored.https_url,
+      `https://watch-cal.vercel.app/api/feed/${id}.ics`
+    );
+    assert.equal(
+      restored.webcal_url,
+      `webcal://watch-cal.vercel.app/api/feed/${id}.ics`
+    );
+    assert.equal(
+      restored.download_url,
+      `https://watch-cal.vercel.app/api/feed/${id}.ics?download=1`
+    );
+    assert.match(restored.webcal_url, /^webcal:/);
+    assert.match(restored.https_url, /^https:.*\.ics$/);
+  });
+
+  it("homepage persists last watch in localStorage only (no share query)", async () => {
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.match(page, /watchcal:lastWatch/);
+    assert.match(page, /localStorage\.setItem/);
+    assert.match(page, /localStorage\.getItem/);
+    assert.match(page, /rememberWatch/);
+    assert.match(page, /href=\{watch\.webcal_url\}/);
+    assert.match(page, /href=\{watch\.https_url\}/);
+    assert.doesNotMatch(page, /URLSearchParams|searchParams|\?id=/);
   });
 });
 
