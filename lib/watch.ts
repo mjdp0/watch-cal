@@ -120,7 +120,10 @@ export async function refreshWatch(
 
   const fetched = await fetchSource(watch.sourceUrl, opts.fetcher);
   const sourceHash = hashContent(fetched.text);
-  const { title, events } = parseSourceText(fetched.text, now);
+  const { title, events } = parseSourceText(fetched.text, now, {
+    sourceTitle: fetched.title,
+    sourceUrl: watch.sourceUrl,
+  });
   const calName = fetched.title || title || "WatchCal";
   const ics = eventsToIcs(watch.id, calName, events, now, watch.sourceUrl);
 
@@ -177,7 +180,10 @@ export async function watchUrl(
 
   const id = watchIdFromSourceUrl(normalized);
   const sourceHash = hashContent(fetched.text);
-  const { title, events } = parseSourceText(fetched.text, now);
+  const { title, events } = parseSourceText(fetched.text, now, {
+    sourceTitle: fetched.title,
+    sourceUrl: normalized,
+  });
   const calName = fetched.title || title || "WatchCal";
   const ics = eventsToIcs(id, calName, events, now, normalized);
   const watch = await saveWatch(
