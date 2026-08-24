@@ -1482,6 +1482,33 @@ export function parseWesternCapeExamPage(text: string): ParsedEvent[] {
 }
 
 /**
+ * Merge exam-nav page parses into one VEVENT per parent fact
+ * (summary + DTSTART + DTEND). Same results/registration wording on
+ * /exams + nsc-june + sc-mayjune must not triple the calendar.
+ * Distinct titles stay distinct (NSC exam vs SC Exam; awards Schools vs Candidates).
+ */
+export function mergeWesternCapeExamEvents(
+  batches: ParsedEvent[][]
+): ParsedEvent[] {
+  const seen = new Set<string>();
+  const out: ParsedEvent[] = [];
+  for (const batch of batches) {
+    for (const e of batch) {
+      const key = `${e.summary}|${e.start}|${e.end}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(e);
+    }
+  }
+  return out;
+}
+
+/** Parse several exam-nav extracts and emit each parent fact once. */
+export function parseWesternCapeExamPages(texts: string[]): ParsedEvent[] {
+  return mergeWesternCapeExamEvents(texts.map(parseWesternCapeExamPage));
+}
+
+/**
  * English WCED planning PDF: religious observances + curated parent-facing
  * admission/NSC rows (PDF wording). Untitled CEMIS/sign-off/QMS/LTSM admin mush
  * is dropped. Grade 12 / NSC exam nav URLs are parsed separately.

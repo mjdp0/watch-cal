@@ -17,6 +17,7 @@ import { eventsToIcs } from "./ics";
 import { assertPublicHttpUrl, fetchSource } from "./fetchSource";
 import {
   isWesternCapeSchoolCalendarUrl,
+  mergeWesternCapeExamEvents,
   parseSourceText,
   parseWesternCapeExamPage,
   parseWesternCapePlanningPdf,
@@ -92,16 +93,17 @@ async function parseWatchSource(
     } catch {
       // Terms + holidays from the HTML still ship; planning may be 0.
     }
+    const examBatches: ParsedEvent[][] = [];
     for (const examUrl of WESTERN_CAPE_EXAM_PAGE_URLS) {
       try {
         const page = await fetchSource(examUrl, fetcher);
-        const examEvents = parseWesternCapeExamPage(page.text);
-        all = [...all, ...examEvents];
+        examBatches.push(parseWesternCapeExamPage(page.text));
         hashMaterial = hashMaterial + "\n" + page.text;
       } catch {
         // Optional enrichment — school-calendar HTML + planning still ship.
       }
     }
+    all = [...all, ...mergeWesternCapeExamEvents(examBatches)];
   }
   return {
     title: fetchedTitle || title || "WatchCal",
