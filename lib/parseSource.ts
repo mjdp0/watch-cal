@@ -1033,6 +1033,27 @@ const WC_PLANNING_PARENT_ROWS: Array<{
     summary: "Safe Schools Holiday Programme",
   },
   {
+    // Later same-title holiday programmes — each numbered row keeps its own due dates
+    item: 157,
+    titleRe: /Safe\s+Schools\s+Holiday\s+Programme/i,
+    summary: "Safe Schools Holiday Programme",
+  },
+  {
+    item: 227,
+    titleRe: /Safe\s+Schools\s+Holiday\s+Programme/i,
+    summary: "Safe Schools Holiday Programme",
+  },
+  {
+    item: 289,
+    titleRe: /Safe\s+Schools\s+Holiday\s+Programme/i,
+    summary: "Safe Schools Holiday Programme",
+  },
+  {
+    item: 63,
+    titleRe: /Safe\s+Schools[''\u2019]\s+Back\s+to\s+School\s+Drive/i,
+    summary: "Safe Schools' Back to School Drive",
+  },
+  {
     item: 123,
     titleRe:
       /System\s+displays\s+the\s+outcome\s+of\s+Grades\s+R,\s*1\s+and\s+8\s+online\s+admission\s+applications/i,
@@ -1052,16 +1073,54 @@ const WC_PLANNING_PARENT_ROWS: Array<{
     summary: "National Schools MOOT Court (Grades 9–10) – registration",
   },
   {
+    item: 151,
+    titleRe:
+      /MOOT\s+Court\s*[–—−-]\s*workshop\s+on\s+essay\s+writing\s+\(virtual\)/i,
+    summary: "MOOT Court – workshop on essay writing (virtual)",
+  },
+  {
     item: 152,
     titleRe:
       /Youth\s+Citizen\s+Action\s+Programme\s+\(YCAP\)\s*[–—−-]\s*registration/i,
     summary: "Youth Citizen Action Programme (YCAP) – registration",
   },
   {
+    item: 154,
+    titleRe: /YCAP\s*[–—−-]\s*provincial\s+workshop\s+\(virtual\)/i,
+    summary: "YCAP – provincial workshop (virtual)",
+  },
+  {
+    item: 156,
+    titleRe: /SASCE\s*[–—−-]\s*provincial\s+round/i,
+    summary: "SASCE – provincial round",
+  },
+  {
+    item: 158,
+    titleRe: /SASCE\s*[–—−-]\s*national\s+championship/i,
+    summary: "SASCE – national championship",
+  },
+  {
     item: 199,
     titleRe:
       /System\s+displays\s+the\s+outcome\s+of\s+transfer\s+requests/i,
     summary: "System displays the outcome of transfer requests",
+  },
+  {
+    item: 221,
+    titleRe: /YCAP\s*[–—−-]\s*provincial\s+workshop\s+\(virtual\)/i,
+    summary: "YCAP – provincial workshop (virtual)",
+  },
+  {
+    item: 225,
+    titleRe:
+      /National\s+Schools\s+MOOT\s+Court\s+Competition\s*[–—−-]\s*provincial\s+oral\s+round/i,
+    summary:
+      "National Schools MOOT Court Competition – provincial oral round",
+  },
+  {
+    item: 226,
+    titleRe: /YCAP\s*[–—−-]\s*provincial\s+competition/i,
+    summary: "YCAP – provincial competition",
   },
   {
     item: 238,
