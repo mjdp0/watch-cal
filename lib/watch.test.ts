@@ -98,7 +98,8 @@ describe("homepage examples and copy", () => {
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
-    // Extra / $5 label wiring — Ridgewood + Central Region GUIDELINE; Stithians omitted
+    // Extra / $5 label wiring — Ridgewood + Central Region + King David draft +
+    // Hilton; Stithians omitted
     assert.match(
       page,
       /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
@@ -119,6 +120,15 @@ describe("homepage examples and copy", () => {
       page,
       /isasa\.org\/download\/central-region-calendar-2026/
     );
+    assert.match(page, /King David 2026 calendar \(draft\)/);
+    assert.match(
+      page,
+      /kingdavid\.org\.za\/wp-content\/uploads\/2025\/06\/2026-Draft-Calendar-May-2025-2\.pdf/
+    );
+    // Landing has no term table — Extra watches the draft PDF
+    assert.doesNotMatch(page, /kingdavid\.org\.za\/calendar\/(?!")/);
+    assert.match(page, /Hilton College terms \+ fixtures 2026/);
+    assert.match(page, /hiltoncollege\.com\/the-hilton-calendar\//);
     // Stithians PDF is not the calendar a parent would read yet — tile omitted
     assert.doesNotMatch(page, /School calendar \(St /);
     assert.doesNotMatch(
@@ -1937,6 +1947,212 @@ describe("parseSource", () => {
       ics,
       /DTSTART;TZID=Africa\/Johannesburg:20260219T120000[\s\S]*?DTEND;TZID=Africa\/Johannesburg:20260224T000000[\s\S]*?SUMMARY:3-term Half Term/
     );
+  });
+
+  it("King David 2026 draft PDF fixture: terms + holidays; no invented T4 vacation end", async () => {
+    const {
+      parseSourceText,
+      looksLikeKingDavidDraftCalendar,
+      KING_DAVID_2026_DRAFT_PDF_URL,
+    } = await import("./parseSource");
+    const { eventsToIcs } = await import("./ics");
+    const extract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/king-david-2026-draft-extract.txt"
+      ),
+      "utf8"
+    );
+    assert.ok(
+      looksLikeKingDavidDraftCalendar(extract),
+      "fixture must look like King David draft calendar"
+    );
+    assert.match(extract, /2026 CALENDAR/);
+    assert.match(extract, /\(\s*Draft\b/i);
+    assert.match(extract, /10\s*\n?\s*th\s*\n?\s*December to/i);
+
+    const { events, title } = parseSourceText(extract, new Date("2026-08-24"), {
+      sourceTitle: "2026-Draft-Calendar-May-2025-2.pdf",
+      sourceUrl: KING_DAVID_2026_DRAFT_PDF_URL,
+    });
+    assert.match(title, /King David.*Draft/i);
+
+    function mustSpan(
+      summary: string,
+      startYmd: string,
+      endExclusiveYmd: string
+    ) {
+      const hit = events.find(
+        (e) =>
+          e.summary === summary &&
+          e.start.startsWith(startYmd) &&
+          e.end.startsWith(endExclusiveYmd) &&
+          e.allDay === true
+      );
+      assert.ok(
+        hit,
+        `missing ${summary} ${startYmd}→${endExclusiveYmd}; got ${events
+          .map(
+            (e) =>
+              `${e.summary}|${e.start.slice(0, 10)}→${e.end.slice(0, 10)}`
+          )
+          .join("; ")}`
+      );
+      return hit!;
+    }
+
+    mustSpan("Teachers", "2026-01-12", "2026-01-13");
+    mustSpan("Term 1 2026", "2026-01-13", "2026-04-01");
+    mustSpan("Vacation 1 2026", "2026-04-01", "2026-04-20");
+    mustSpan("Term 2 2026", "2026-04-20", "2026-07-04");
+    mustSpan("Vacation 2 2026", "2026-07-04", "2026-07-22");
+    mustSpan("Term 3 2026", "2026-07-22", "2026-09-19");
+    mustSpan("Vacation 3 2026", "2026-09-19", "2026-10-05");
+    mustSpan("Term 4 2026", "2026-10-05", "2026-12-10");
+    // Incomplete "10th December to" — never invent an end
+    assert.ok(!events.some((e) => /Vacation 4/i.test(e.summary)));
+
+    mustSpan("New Year's Day", "2026-01-01", "2026-01-02");
+    mustSpan("Human Rights Day", "2026-03-21", "2026-03-22");
+    mustSpan("Pesach", "2026-04-02", "2026-04-10");
+    mustSpan("Shavuot", "2026-05-22", "2026-05-24");
+    mustSpan("Rosh Hashana", "2026-09-12", "2026-09-14");
+    mustSpan("Yom Kippur", "2026-09-21", "2026-09-22");
+    mustSpan("Sukkot", "2026-09-26", "2026-10-03");
+    mustSpan("Chanukah", "2026-12-04", "2026-12-13");
+
+    // Draft gazette year / uploads/2025/ path must not steal school year
+    assert.ok(events.every((e) => e.start.startsWith("2026-")));
+
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.match(page, /King David 2026 calendar \(draft\)/);
+    assert.match(page, /2026-Draft-Calendar-May-2025-2\.pdf/);
+
+    const ics = eventsToIcs(
+      "king-david-test",
+      title,
+      events,
+      new Date("2026-08-24T12:00:00Z"),
+      KING_DAVID_2026_DRAFT_PDF_URL
+    );
+    assert.match(ics, /SUMMARY:Term 1 2026/);
+    assert.match(ics, /SUMMARY:Pesach/);
+    assert.doesNotMatch(ics, /SUMMARY:Vacation 4/);
+  });
+
+  it("Hilton College fixture: official terms only; leftover Start:/End: omitted", async () => {
+    const {
+      parseSourceText,
+      looksLikeHiltonCollegeCalendar,
+      HILTON_COLLEGE_CALENDAR_URL,
+    } = await import("./parseSource");
+    const { eventsToIcs } = await import("./ics");
+    const extract = await readFile(
+      path.join(process.cwd(), "lib/fixtures/hilton-college-2026-extract.txt"),
+      "utf8"
+    );
+    assert.ok(
+      looksLikeHiltonCollegeCalendar(extract),
+      "fixture must look like Hilton official term block"
+    );
+    // Both conflicting blocks present in the recorded extract
+    assert.match(extract, /Tuesday 13 January/);
+    assert.match(extract, /to Friday 27 March/);
+    assert.match(extract, /Wednesday 15 January/);
+    assert.match(extract, /Start:/);
+    assert.match(extract, /End:/);
+    assert.match(extract, /Half-term:/);
+    assert.match(extract, /Reunion Weekend/);
+
+    const { events, title } = parseSourceText(extract, new Date("2026-08-24"), {
+      sourceTitle: "The Hilton Calendar | Hilton College",
+      sourceUrl: HILTON_COLLEGE_CALENDAR_URL,
+    });
+    assert.match(title, /Hilton/i);
+
+    function mustSpan(
+      summary: string,
+      startYmd: string,
+      endExclusiveYmd: string
+    ) {
+      const hit = events.find(
+        (e) =>
+          e.summary === summary &&
+          e.start.startsWith(startYmd) &&
+          e.end.startsWith(endExclusiveYmd) &&
+          e.allDay === true
+      );
+      assert.ok(
+        hit,
+        `missing ${summary} ${startYmd}→${endExclusiveYmd}; got ${events
+          .map(
+            (e) =>
+              `${e.summary}|${e.start.slice(0, 10)}→${e.end.slice(0, 10)}`
+          )
+          .join("; ")}`
+      );
+      return hit!;
+    }
+
+    // Official block (printed twice on page) — one of each after dedupe
+    mustSpan("Term 1 2026", "2026-01-13", "2026-03-28");
+    mustSpan("Term 2 2026", "2026-04-20", "2026-06-27");
+    mustSpan("Term 3 2026", "2026-07-20", "2026-09-24");
+    mustSpan("Term 4 2026", "2026-10-06", "2026-11-28");
+    assert.equal(events.filter((e) => e.summary === "Term 1 2026").length, 1);
+    assert.equal(events.filter((e) => e.summary === "Half term").length, 4);
+    mustSpan("Half term", "2026-02-19", "2026-02-24");
+    mustSpan("Half term", "2026-05-21", "2026-05-26");
+    mustSpan("Half term", "2026-08-20", "2026-08-25");
+    mustSpan("Half term", "2026-10-29", "2026-11-03");
+
+    // Leftover block MUST NOT ship
+    assert.ok(
+      !events.some(
+        (e) =>
+          e.summary === "Term 1 2026" && e.start.startsWith("2026-01-15")
+      )
+    );
+    assert.ok(!events.some((e) => e.start.startsWith("2026-01-15")));
+    assert.ok(
+      !events.some(
+        (e) =>
+          e.summary === "Term 1 2026" && e.end.startsWith("2026-03-29")
+      )
+    );
+    assert.ok(!events.some((e) => e.start.startsWith("2026-04-23")));
+    assert.ok(!events.some((e) => e.start.startsWith("2026-10-07")));
+
+    // Full Calendar fixtures from written day:label rows
+    mustSpan(
+      "Summer fixture vs Michaelhouse (home)",
+      "2026-02-28",
+      "2026-03-01"
+    );
+    mustSpan("Reunion Weekend", "2026-04-24", "2026-04-26");
+    mustSpan("Hilton Arts Festival", "2026-08-07", "2026-08-10");
+    mustSpan("Speech Night", "2026-09-22", "2026-09-23");
+
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.match(page, /Hilton College terms \+ fixtures 2026/);
+    assert.match(page, /hiltoncollege\.com\/the-hilton-calendar\//);
+
+    const ics = eventsToIcs(
+      "hilton-test",
+      title,
+      events,
+      new Date("2026-08-24T12:00:00Z"),
+      HILTON_COLLEGE_CALENDAR_URL
+    );
+    assert.match(ics, /SUMMARY:Term 1 2026/);
+    assert.match(ics, /SUMMARY:Reunion Weekend/);
+    assert.doesNotMatch(ics, /DTSTART;VALUE=DATE:20260115/);
   });
 
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {
