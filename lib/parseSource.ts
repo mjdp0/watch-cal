@@ -2038,6 +2038,307 @@ export function parseTermStartCloseCalendar(
   };
 }
 
+/** Live Brescia-hosted ISASA/SAHISA Central Region 2026 guideline PDF. */
+export const ISASA_CENTRAL_REGION_2026_PDF_URL =
+  "https://www.brescia.co.za/uploads/files/Calendars/ISASA.and.SAHISA.Central.Region.Calendar.2026.pdf";
+
+export function isIsasaCentralRegionCalendarUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      /(^|\.)brescia\.co\.za$/i.test(u.hostname) &&
+      /ISASA\.and\.SAHISA\.Central\.Region\.Calendar\.2026\.pdf$/i.test(
+        u.pathname
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * ISASA / SAHISA Central Region guideline PDF (4-term + 3-term columns).
+ * Do not treat the isasa.org download HTML page as this calendar.
+ */
+export function looksLikeIsasaCentralRegionCalendar(text: string): boolean {
+  return (
+    /ISASA\s*\/\s*SAHISA\s+Central\s+Region/i.test(text) &&
+    /only a guideline/i.test(text) &&
+    /4\s+TERM\s+CALENDAR/i.test(text) &&
+    /3\s+TERM\s+CALENDAR/i.test(text)
+  );
+}
+
+/** Join PDF line-breaks for known Central Region headers / half-term clock. */
+function normalizeCentralRegionLines(text: string): string[] {
+  const raw = normalizeDashEntities(text.replace(/\u00a0/g, " "))
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const out: string[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    let line = raw[i];
+    // "Public" / "and" / "School" / "Holidays" or "Public" / "Holidays"
+    if (/^Public$/i.test(line)) {
+      const parts = [line];
+      let j = i + 1;
+      while (
+        j < raw.length &&
+        /^(and|School|Holidays)$/i.test(raw[j]) &&
+        parts.length < 4
+      ) {
+        parts.push(raw[j]);
+        j++;
+      }
+      if (/^Holidays$/i.test(parts[parts.length - 1])) {
+        out.push(parts.join(" "));
+        i = j - 1;
+        continue;
+      }
+    }
+    // "CLOSE Thursday 22 October" + "(12h00)" on the next line
+    if (
+      /^CLOSE\b/i.test(line) &&
+      i + 1 < raw.length &&
+      /^\(\d{1,2}h\d{2}\)$/i.test(raw[i + 1])
+    ) {
+      line = `${line} ${raw[i + 1]}`;
+      i++;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+/**
+ * Holiday / mid-term rows from one Central Region column (year inherited).
+ * Same-month ranges like "28 – 30 April (Mid-Term)"; parenthetical date-only
+ * rows keep the written day (no invented holiday name from the other column).
+ */
+function parseCentralRegionHolidayLine(
+  line: string,
+  year: number
+): ParsedEvent | null {
+  const raw = normalizeDashEntities(line).replace(/['\u2019]/g, "'");
+
+  // "28 – 30 April (Mid-Term)"
+  const sameMonth = raw.match(
+    new RegExp(
+      String.raw`^(\d{1,2})(?:st|nd|rd|th)?\s*[–—−-]\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*\(([^)]+)\)\s*$`,
+      "i"
+    )
+  );
+  if (sameMonth) {
+    const month = MONTHS[sameMonth[3].toLowerCase()];
+    const name = sameMonth[4].replace(/\s+/g, " ").trim();
+    if (month != null && name.length >= 3 && !/^\d{1,2}h\d{2}$/i.test(name)) {
+      const a = parseDateParts(Number(sameMonth[1]), month, year);
+      const b = parseDateParts(Number(sameMonth[2]), month, year);
+      if (a && b && b.getTime() >= a.getTime()) {
+        return allDaySpan(name, raw, a, b);
+      }
+    }
+  }
+
+  const named = parseTermPublicHolidayLine(raw, year);
+  if (named) return named;
+
+  // "(Monday 15 June)" / "(Friday 25 September)" — date only, no label
+  const parenOnly = raw.match(
+    new RegExp(
+      String.raw`^\((?:${WEEKDAY_ALT})\s+(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\)$`,
+      "i"
+    )
+  );
+  if (parenOnly) {
+    const month = MONTHS[parenOnly[2].toLowerCase()];
+    if (month == null) return null;
+    const d = parseDateParts(Number(parenOnly[1]), month, year);
+    if (!d) return null;
+    const monthName =
+      parenOnly[2].charAt(0).toUpperCase() + parenOnly[2].slice(1).toLowerCase();
+    // Title is the written day + document year — do not steal "School Holiday"
+    // from the other column.
+    return allDayDay(`${Number(parenOnly[1])} ${monthName} ${year}`, raw, d);
+  }
+
+  return null;
+}
+
+/**
+ * One column (4-term or 3-term) of the Central Region guideline PDF.
+ * Start/Close term spans; Half Term CLOSE→RETURN; in-term holiday rows only.
+ */
+function parseCentralRegionSystem(
+  lines: string[],
+  year: number,
+  system: "4-term" | "3-term"
+): ParsedEvent[] {
+  const events: ParsedEvent[] = [];
+  let termN: number | null = null;
+  let start: Date | null = null;
+  let inHalfTerm = false;
+  let halfClose: {
+    date: Date;
+    hour: number | null;
+    minute: number;
+    line: string;
+  } | null = null;
+  let inHolidays = false;
+
+  for (const line of lines) {
+    if (/^\d\s+TERM\s+CALENDAR$/i.test(line) || /^Total\b/i.test(line)) {
+      continue;
+    }
+
+    const tm = line.match(/^Term\s+([1234])\b/i);
+    if (tm) {
+      termN = Number(tm[1]);
+      start = null;
+      inHalfTerm = false;
+      halfClose = null;
+      inHolidays = false;
+      continue;
+    }
+    if (termN == null) continue;
+
+    if (/^Start\b/i.test(line)) {
+      const md = mdOnLine(line, year);
+      if (md) start = md.date;
+      inHalfTerm = false;
+      halfClose = null;
+      inHolidays = false;
+      continue;
+    }
+
+    if (/^Half\s+Term\b/i.test(line)) {
+      inHalfTerm = true;
+      halfClose = null;
+      inHolidays = false;
+      continue;
+    }
+
+    if (/^Public\b/i.test(line) && /Holidays$/i.test(line)) {
+      inHalfTerm = false;
+      halfClose = null;
+      inHolidays = true;
+      continue;
+    }
+
+    // Half-term CLOSE/RETURN (uppercase in PDF) — not term Close
+    if (inHalfTerm && /^CLOSE\b/.test(line)) {
+      const md = mdOnLine(line, year);
+      if (md) halfClose = { ...md, line };
+      continue;
+    }
+
+    if (inHalfTerm && /^RETURN\b/.test(line) && halfClose) {
+      const md = mdOnLine(line, year);
+      if (md) {
+        const ev = halfTermBreakEvent(
+          `${system} Half Term`,
+          `${halfClose.line}; ${line}`,
+          halfClose,
+          md.date
+        );
+        if (ev) events.push(ev);
+      }
+      halfClose = null;
+      inHalfTerm = false;
+      continue;
+    }
+
+    if (/^Close\b/.test(line) && start) {
+      const md = mdOnLine(line, year);
+      if (!md) continue;
+      events.push(
+        allDaySpan(
+          `${system} Term ${termN} ${year}`,
+          line,
+          start,
+          md.date
+        )
+      );
+      start = null;
+      continue;
+    }
+
+    if (inHolidays) {
+      const hol = parseCentralRegionHolidayLine(line, year);
+      if (hol) {
+        // Prefix Mid-Term / keep public-holiday names; system only on terms + half
+        if (/^Mid-Term$/i.test(hol.summary)) {
+          events.push({ ...hol, summary: `${system} Mid-Term` });
+        } else {
+          events.push(hol);
+        }
+      }
+    }
+  }
+
+  return events;
+}
+
+/**
+ * ISASA / SAHISA Central Region 2026 GUIDELINE PDF: emit both 4-term and
+ * 3-term Start/Close spans plus that column’s in-term holidays / half terms.
+ * Columns are parsed separately — never mix days across systems.
+ */
+export function parseIsasaCentralRegionCalendar(
+  text: string,
+  opts?: ParseSourceOptions
+): { title: string; events: ParsedEvent[] } {
+  const cleaned = text.replace(/\u00a0/g, " ");
+  const year =
+    inferDocumentYear(cleaned, opts) ||
+    (() => {
+      const m = cleaned.match(/\b(20\d{2})\s+Calendar\b/i);
+      return m ? Number(m[1]) : null;
+    })();
+  if (year == null) {
+    return {
+      title: "ISASA / SAHISA Central Region GUIDELINE",
+      events: [],
+    };
+  }
+
+  const fourMark = cleaned.search(/4\s+TERM\s+CALENDAR/i);
+  const threeMark = cleaned.search(/3\s+TERM\s+CALENDAR/i);
+  if (fourMark < 0 || threeMark < 0) {
+    return {
+      title: "ISASA / SAHISA Central Region 2026 GUIDELINE",
+      events: [],
+    };
+  }
+
+  const fourText =
+    fourMark < threeMark
+      ? cleaned.slice(fourMark, threeMark)
+      : cleaned.slice(fourMark);
+  const threeText =
+    threeMark < fourMark
+      ? cleaned.slice(threeMark, fourMark)
+      : cleaned.slice(threeMark);
+
+  const events = [
+    ...parseCentralRegionSystem(
+      normalizeCentralRegionLines(fourText),
+      year,
+      "4-term"
+    ),
+    ...parseCentralRegionSystem(
+      normalizeCentralRegionLines(threeText),
+      year,
+      "3-term"
+    ),
+  ];
+
+  return {
+    title: "ISASA / SAHISA Central Region 2026 GUIDELINE",
+    events,
+  };
+}
+
 /**
  * Conservative dated-event extractor for HTML/PDF plain text.
  * Year is required on the line, or inherited only for written date ranges and
@@ -2049,6 +2350,7 @@ export function parseTermStartCloseCalendar(
  * SPANS (not yearless open/close dots); holidays keep the year in the name.
  * Independent START:/CLOSE: term pages (year-stamped) become Term N spans plus
  * that page’s half-term CLOSE→RETURN and named Public Holiday lines.
+ * ISASA/SAHISA Central Region guideline PDF: 4-term + 3-term columns separately.
  */
 export function parseSourceText(
   text: string,
@@ -2066,6 +2368,13 @@ export function parseSourceText(
     if (looksLikeWesternCapeSchoolCalendar(cleaned)) {
       return parseWesternCapeSchoolCalendarHtml(cleaned);
     }
+  }
+
+  if (
+    looksLikeIsasaCentralRegionCalendar(cleaned) ||
+    (opts?.sourceUrl && isIsasaCentralRegionCalendarUrl(opts.sourceUrl))
+  ) {
+    return parseIsasaCentralRegionCalendar(cleaned, opts);
   }
 
   if (looksLikeTermStartCloseCalendar(cleaned)) {
