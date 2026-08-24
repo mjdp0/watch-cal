@@ -701,6 +701,56 @@ describe("parseSource", () => {
       "#286 Grades 10–11 appeals"
     );
 
+    // Next parent-usable batch (system displays / systemic tests / enrichment deadlines)
+    must(
+      /^System displays the outcome of Grades R, 1 and 8 online admission applications$/,
+      "2026-05-28",
+      "2026-05-29",
+      "#123 system displays R/1/8 admission outcomes"
+    );
+    must(
+      /^System displays the outcome of transfer requests$/,
+      "2026-09-16",
+      "2026-09-17",
+      "#199 system displays transfer outcomes"
+    );
+    must(
+      /^Administration of WCED Systemic Tests for Grades 3, 6 and 9$/,
+      "2026-10-12",
+      "2026-10-28",
+      "#238 WCED Systemic Tests Grades 3/6/9"
+    );
+    must(
+      /^Election of Representative Councils of Learners \(RCLs\)$/,
+      "2026-02-27",
+      "2026-02-28",
+      "#64 RCL elections"
+    );
+    must(
+      /^South African Schools Choral Eisteddfod \(SASCE\) [–—−-] registration$/,
+      "2026-03-27",
+      "2026-03-28",
+      "#68 SASCE registration"
+    );
+    must(
+      /^Safe Schools Holiday Programme$/,
+      "2026-03-30",
+      "2026-04-03",
+      "#69 Safe Schools Holiday Programme"
+    );
+    must(
+      /^National Schools MOOT Court \(Grades 9[–—−-]10\) [–—−-] registration$/,
+      "2026-04-17",
+      "2026-04-18",
+      "#150 MOOT Court registration"
+    );
+    must(
+      /^Youth Citizen Action Programme \(YCAP\) [–—−-] registration$/,
+      "2026-05-08",
+      "2026-05-09",
+      "#152 YCAP registration"
+    );
+
     // #209 PDF is month-only ("August 2026") — must NOT invent 31 Jul or 1–31 Aug
     const mayJuneResults = events.filter((e) =>
       /Release of May\/June NSC\/SC examination results/i.test(e.summary)
@@ -813,6 +863,39 @@ describe("parseSource", () => {
     assert.match(accomClose!.start, /^2026-10-04/);
     assert.match(accomClose!.end, /^2026-10-05/);
     assert.doesNotMatch(accomClose!.start, /^2026-10-03/);
+
+    // Batch-4 parent rows also follow the due-date cell
+    const moved123 = extract.replace(
+      /(123\.\s+System\s+displays\s+the\s+outcome\s+of\s+Grades\s+R,\s*1\s+and\s+8[\s\S]*?)28 May 2026/,
+      "$129 May 2026"
+    );
+    assert.match(moved123, /123\.[\s\S]*?29 May 2026/);
+    const events123 = parseWesternCapePlanningPdf(moved123);
+    const sysDisplay = events123.find(
+      (e) =>
+        e.summary ===
+        "System displays the outcome of Grades R, 1 and 8 online admission applications"
+    );
+    assert.ok(sysDisplay);
+    assert.match(sysDisplay!.start, /^2026-05-29/);
+    assert.match(sysDisplay!.end, /^2026-05-30/);
+    assert.doesNotMatch(sysDisplay!.start, /^2026-05-28/);
+
+    const moved238 = extract.replace(
+      /(238\.\s+Administration\s+of\s+WCED\s+Systemic\s+Tests[\s\S]*?)12 to 27 October 2026/,
+      "$113 to 28 October 2026"
+    );
+    assert.match(moved238, /238\.[\s\S]*?13 to 28 October 2026/);
+    const events238 = parseWesternCapePlanningPdf(moved238);
+    const systemic = events238.find(
+      (e) =>
+        e.summary ===
+        "Administration of WCED Systemic Tests for Grades 3, 6 and 9"
+    );
+    assert.ok(systemic);
+    assert.match(systemic!.start, /^2026-10-13/);
+    assert.match(systemic!.end, /^2026-10-29/);
+    assert.doesNotMatch(systemic!.start, /^2026-10-12/);
   });
 
   it("item #42 due date stays 27 Jan when 29 Jan sits before 43. in the extract", async () => {

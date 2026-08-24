@@ -1015,10 +1015,59 @@ const WC_PLANNING_PARENT_ROWS: Array<{
     summary: "Grade 11 subject change applications by parents",
   },
   {
+    item: 64,
+    titleRe:
+      /Election\s+of\s+Representative\s+Councils\s+of\s+Learners\s+\(RCLs\)/i,
+    summary: "Election of Representative Councils of Learners (RCLs)",
+  },
+  {
+    item: 68,
+    titleRe:
+      /South\s+African\s+Schools\s+Choral\s+Eisteddfod\s+\(SASCE\)\s*[–—−-]\s*registration/i,
+    summary:
+      "South African Schools Choral Eisteddfod (SASCE) – registration",
+  },
+  {
+    item: 69,
+    titleRe: /Safe\s+Schools\s+Holiday\s+Programme/i,
+    summary: "Safe Schools Holiday Programme",
+  },
+  {
+    item: 123,
+    titleRe:
+      /System\s+displays\s+the\s+outcome\s+of\s+Grades\s+R,\s*1\s+and\s+8\s+online\s+admission\s+applications/i,
+    summary:
+      "System displays the outcome of Grades R, 1 and 8 online admission applications",
+  },
+  {
     item: 147,
     titleRe:
       /Grade\s+10\s+subject\s+change\s+applications\s+by\s+parents/i,
     summary: "Grade 10 subject change applications by parents",
+  },
+  {
+    item: 150,
+    titleRe:
+      /National\s+Schools\s+MOOT\s+Court\s+\(Grades\s+9[–—−-]10\)\s*[–—−-]\s*registration/i,
+    summary: "National Schools MOOT Court (Grades 9–10) – registration",
+  },
+  {
+    item: 152,
+    titleRe:
+      /Youth\s+Citizen\s+Action\s+Programme\s+\(YCAP\)\s*[–—−-]\s*registration/i,
+    summary: "Youth Citizen Action Programme (YCAP) – registration",
+  },
+  {
+    item: 199,
+    titleRe:
+      /System\s+displays\s+the\s+outcome\s+of\s+transfer\s+requests/i,
+    summary: "System displays the outcome of transfer requests",
+  },
+  {
+    item: 238,
+    titleRe:
+      /Administration\s+of\s+WCED\s+Systemic\s+Tests\s+for\s+Grades\s+3,\s*6\s+and\s+9/i,
+    summary: "Administration of WCED Systemic Tests for Grades 3, 6 and 9",
   },
   {
     item: 267,
