@@ -289,6 +289,35 @@ function findDates(text: string, inheritYear: number | null): DateHit[] {
         raw: hm[0],
       });
     }
+
+    // School PDF style: "Term Commences Wednesday 14 January" /
+    // "Half Term Thursday 19 February" — weekday + day + month, document year.
+    // Require a non-weekday label before the weekday on the same line (or a
+    // trailing label) so bare weekday crumbs are not invented as events.
+    const weekdayDateRe = new RegExp(
+      String.raw`\b(?:${WEEKDAY_ALT})\s+(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})(?!\s+((?:19|20)\d{2})\b)`,
+      "gi"
+    );
+    let wm: RegExpExecArray | null;
+    while ((wm = weekdayDateRe.exec(text)) !== null) {
+      if (isOutlineNumbering(text, wm.index)) continue;
+      const end = wm.index + wm[0].length;
+      if (overlapsExisting(hits, wm.index, end)) continue;
+      const lineStart = text.lastIndexOf("\n", wm.index) + 1;
+      const before = text.slice(lineStart, wm.index).replace(/\s+/g, " ").trim();
+      const beforeClean = stripTrailingWeekday(before);
+      if (beforeClean.length < 3 && !hasTrailingLabel(text, end)) continue;
+      const month = MONTHS[wm[2].toLowerCase()];
+      if (month == null) continue;
+      const date = parseDateParts(Number(wm[1]), month, inheritYear);
+      if (!date) continue;
+      hits.push({
+        index: wm.index,
+        end,
+        date,
+        raw: wm[0],
+      });
+    }
   }
 
   hits.sort((a, b) => a.index - b.index);
@@ -326,13 +355,66 @@ const TERM_ORDINAL: Record<string, number> = {
   four: 4,
 };
 
-/** Bare Opens/Closes or footnote leftovers — never usable as SUMMARY. */
+const WEEKDAY_ALT =
+  "Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday";
+
+const WEEKDAY_ONLY =
+  /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i;
+
+/** Remove a weekday glued before a date — not weekdays inside names (Good Friday). */
+function stripTrailingWeekday(s: string): string {
+  return s
+    .replace(new RegExp(String.raw`\b(?:${WEEKDAY_ALT})\s*$`, "i"), "")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,;:\-\u2013\u2014–—]+|[\s,;:\-\u2013\u2014–—]+$/gu, "")
+    .trim();
+}
+
+/** Bare Opens/Closes, weekday crumbs, or footnote leftovers — never SUMMARY. */
 function isJunkSummary(s: string): boolean {
   const t = s.trim();
+  if (!t) return true;
   if (/^(opens|closes)$/i.test(t)) return true;
   // "(2)", "(1) | 14 January 2026 (2)", leftover pipe/footnote fragments
   if (/^\(\d+\)/.test(t)) return true;
   if (/^\(\d+\)\s*\|/.test(t)) return true;
+  if (WEEKDAY_ONLY.test(t)) return true;
+  // Table header crumbs: "TERM 2 May", "HOLIDAYS Dec"
+  if (
+    /^(terms?\s*\d+|holidays?|school\s*holidays?)\s+(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  // Bare section headers used as titles
+  if (/^(terms?\s*\d+|holidays?|school\s*holidays?|hol\s*'?s)$/i.test(t)) {
+    return true;
+  }
+  // Chopped multi-weekday / date-list fragments from festival rows
+  const weekdayHits = t.match(new RegExp(String.raw`\b(?:${WEEKDAY_ALT})\b`, "gi"));
+  if (weekdayHits && weekdayHits.length >= 2) return true;
+  if (
+    /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+\d{1,2}\b/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  // Time / punctuation crumbs left after stripping a date
+  if (/^[,;:\-–—/\s\d&)]+$/.test(t)) return true;
+  if (/^\d{1,2}(,\s*\d{1,2})+(\s*(and|&)\s*\d{1,2})?/i.test(t)) return true;
+  if (/,\s*\d{1,2}:\d{2}\b/.test(t) && !/half\s*terms?/i.test(t)) return true;
+  // Audience / note parentheses alone — not an event title (ok as a join piece)
+  if (/^\([^)]*\)\s*$/.test(t)) return true;
+  if (/^term$/i.test(t)) return true;
+  if (/\band\s*$/i.test(t)) return true;
+  if (/\(\s*normal opening\b/i.test(t)) return true;
+  if (/^\d{1,2},\s*/.test(t)) return true;
+  // Truncated "Public Holiday: Good" after bad weekday strip (should not recur)
+  if (/^public holidays?:\s*(good|easter|family|workers'?|freedom|human)?\s*$/i.test(t)) {
+    return true;
+  }
   return false;
 }
 
@@ -400,52 +482,125 @@ function termBoundSummary(text: string, hit: DateHit): string | null {
 }
 
 /**
+ * When the date sits on a weekday-only / empty line (common PDF table extract),
+ * pull the nearest preceding event label — including a parenthetical audience
+ * line like "(Prep Students)". Uses source words; does not invent Term N.
+ */
+function precedingEventLabel(text: string, hit: DateHit): string | null {
+  const lineStart = text.lastIndexOf("\n", hit.index) + 1;
+  const before = text.slice(0, lineStart);
+  const prev = before
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l) => l && !isChromeLine(l));
+  const picked: string[] = [];
+  for (let i = prev.length - 1; i >= Math.max(0, prev.length - 6); i--) {
+    const t = prev[i];
+    if (/^\d{1,3}$/.test(t)) continue;
+    if (/^[–—−-]$/.test(t)) continue;
+    if (WEEKDAY_ONLY.test(t)) continue;
+    // Parenthetical audience joins with the prior label — not junk by itself here
+    if (/^\([^)]+\)$/.test(t)) {
+      picked.unshift(t);
+      continue;
+    }
+    if (isJunkSummary(t)) continue;
+    // Skip pure month tokens from fragmented PDF columns
+    if (MONTHS[t.toLowerCase()] != null) continue;
+    if (/^\(?\d{2,4}\)?$/.test(t)) continue;
+    picked.unshift(t);
+    break;
+  }
+  if (!picked.length) return null;
+  const joined = picked.join(" ").replace(/\s+/g, " ").trim();
+  const cleaned = stripTrailingWeekday(joined);
+  if (!cleaned || isJunkSummary(cleaned)) return null;
+  return cleaned.slice(0, 120);
+}
+
+function finalizeSummary(raw: string | null): string | null {
+  if (!raw) return null;
+  // Do not strip weekdays here — "Good Friday" / "Easter Sunday" are titles.
+  const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!cleaned || isJunkSummary(cleaned)) return null;
+  return cleaned;
+}
+
+/**
  * Build SUMMARY from the line containing the date (or nearest non-chrome line).
  * Returns null when nothing usable exists — caller drops the hit.
+ * Prefer source row labels; never keep bare weekdays or table-header crumbs.
  */
 function lineSummary(text: string, hit: DateHit): string | null {
   const lineStart = text.lastIndexOf("\n", hit.index) + 1;
   const lineEndIdx = text.indexOf("\n", hit.end);
   const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx;
-  let line = text.slice(lineStart, lineEnd).replace(/\s+/g, " ").trim();
+  const line = text.slice(lineStart, lineEnd).replace(/\s+/g, " ").trim();
 
   // Term open/close rows: resolve before afterDate (which otherwise grabs "(2)").
   if (/^(opens|closes)\b/i.test(line)) {
     return termBoundSummary(text, hit);
   }
 
+  // Range rows: keep written spans (DBE-style). Drop TERM/HOLIDAYS column
+  // cells whose only neighbour is a section header (not the PDF a parent reads).
+  if (hit.endDate) {
+    const fromPrev = precedingEventLabel(text, hit);
+    if (
+      fromPrev &&
+      /^(terms?\s*\d+|holidays?|school\s*holidays?|hol\s*'?s)$/i.test(fromPrev)
+    ) {
+      return null;
+    }
+    const beforeRange = stripTrailingWeekday(
+      line.slice(0, Math.max(0, hit.index - lineStart)).replace(/\s+/g, " ")
+    ).trim();
+    const fromBefore = finalizeSummary(beforeRange);
+    if (fromBefore) return fromBefore;
+    if (fromPrev) return fromPrev;
+    const raw = hit.raw.replace(/\s+/g, " ").trim().slice(0, 120);
+    return raw || null;
+  }
+
+  // Same-line label before the date beats afterDate crumbs (", 12:00").
+  // Cut at an earlier weekday+day on multi-date lines ("… Monday 12 and Tuesday 13").
+  const beforeRaw = text.slice(lineStart, hit.index).replace(/\s+/g, " ").trim();
+  const beforeCut = beforeRaw.replace(
+    new RegExp(String.raw`\s+(?:${WEEKDAY_ALT})\s+\d{1,2}\b.*$`, "i"),
+    ""
+  );
+  const beforeDate = stripTrailingWeekday(beforeCut);
+  const fromBeforeDate = finalizeSummary(beforeDate);
+  if (fromBeforeDate) return fromBeforeDate;
+
   // Prefer text after the date on the same line (typical "15 March 2026 Home vs North")
   const afterDate = text
     .slice(hit.end, lineEnd)
     .replace(/^[\s,;:\-\u2013\u2014–—]+/u, "")
     .trim();
-  // Range rows often glue digits after the end date ("27 March1153"); prefer the range raw.
-  if (hit.endDate && (!afterDate || /^\d/.test(afterDate))) {
-    const raw = hit.raw.replace(/\s+/g, " ").trim().slice(0, 120);
-    return isJunkSummary(raw) ? null : raw;
-  }
   if (
     afterDate.length >= 3 &&
     !isChromeLine(afterDate) &&
     !/^\d{2,}/.test(afterDate) &&
     !isJunkSummary(afterDate)
   ) {
-    return afterDate.slice(0, 120);
+    const fromAfter = finalizeSummary(afterDate);
+    if (fromAfter) return fromAfter;
   }
 
-  // Else use the line with the raw date stripped
-  const withoutDate = line
-    .replace(hit.raw, " ")
-    .replace(/\s+/g, " ")
-    .replace(/^[\s,;:\-\u2013\u2014–—]+|[\s,;:\-\u2013\u2014–—]+$/gu, "")
-    .trim();
-  if (
-    withoutDate.length >= 3 &&
-    !isChromeLine(withoutDate) &&
-    !isJunkSummary(withoutDate)
-  ) {
-    return withoutDate.slice(0, 120);
-  }
+  // Else use the line with the raw date stripped; drop a weekday glued to the date only.
+  const withoutDate = stripTrailingWeekday(
+    line
+      .replace(hit.raw, " ")
+      .replace(/\s+/g, " ")
+      .replace(/^[\s,;:\-\u2013\u2014–—]+|[\s,;:\-\u2013\u2014–—]+$/gu, "")
+      .trim()
+  );
+  const withoutDateFinal = finalizeSummary(withoutDate);
+  if (withoutDateFinal) return withoutDateFinal;
+
+  const fromPrev = precedingEventLabel(text, hit);
+  if (fromPrev) return fromPrev;
 
   // Walk nearby non-chrome lines for a title
   const lines = text.split(/\r?\n/);
@@ -461,14 +616,9 @@ function lineSummary(text: string, hit: DateHit): string | null {
   }
   for (const j of [lineIdx - 1, lineIdx + 1, lineIdx - 2, lineIdx + 2]) {
     if (j < 0 || j >= lines.length) continue;
-    const cand = lines[j].trim();
-    if (
-      !isChromeLine(cand) &&
-      cand.length >= 3 &&
-      cand.length <= 120 &&
-      !isJunkSummary(cand)
-    ) {
-      return cand.slice(0, 120);
+    const cand = finalizeSummary(lines[j].trim());
+    if (cand && cand.length >= 3 && cand.length <= 120) {
+      return cand;
     }
   }
   return null;
@@ -508,12 +658,318 @@ function dropChromeLines(text: string): string {
     .join("\n");
 }
 
+/** Live Western Cape school-calendar page (terms + holidays; planning PDF linked). */
+export const WESTERN_CAPE_SCHOOL_CALENDAR_URL =
+  "https://www.westerncape.gov.za/education/school-calendar";
+
+/** English Planning Calendar PDF linked from that page (decode &amp;). */
+export const WESTERN_CAPE_PLANNING_PDF_URL =
+  "https://www.westerncape.gov.za/education/files/wcg-blob-files?file=2025-12/circ28_25-2026-planning-calendar-for-schools.pdf&type=file";
+
+export function isWesternCapeSchoolCalendarUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      /(^|\.)westerncape\.gov\.za$/i.test(u.hostname) &&
+      /\/education\/school-calendar\/?$/i.test(u.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function looksLikeWesternCapeSchoolCalendar(text: string): boolean {
+  return (
+    /Terms \(All Provinces\)/i.test(text) &&
+    /\bOpens:\s*\d{1,2}\s+\w+\s+20\d{2}/i.test(text) &&
+    /\bCloses:\s*\d{1,2}\s+\w+\s+20\d{2}/i.test(text) &&
+    /\(1\)\s*for Educators/i.test(text)
+  );
+}
+
+type WcBound = { date: Date; mark: 1 | 2 | null };
+
+function parseWcBounds(line: string): WcBound[] {
+  const out: WcBound[] = [];
+  const re = new RegExp(
+    String.raw`(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})(?:\s*\((\d+)\))?`,
+    "gi"
+  );
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    const month = MONTHS[m[2].toLowerCase()];
+    if (month == null) continue;
+    const date = parseDateParts(Number(m[1]), month, Number(m[3]));
+    if (!date) continue;
+    const markRaw = m[4] ? Number(m[4]) : null;
+    const mark = markRaw === 1 || markRaw === 2 ? (markRaw as 1 | 2) : null;
+    out.push({ date, mark });
+  }
+  return out;
+}
+
+function allDaySpan(
+  summary: string,
+  description: string,
+  open: Date,
+  close: Date
+): ParsedEvent {
+  const start = new Date(open.getFullYear(), open.getMonth(), open.getDate());
+  const last = new Date(close.getFullYear(), close.getMonth(), close.getDate());
+  const end = new Date(last);
+  end.setDate(end.getDate() + 1);
+  return {
+    summary,
+    description,
+    start: start.toISOString(),
+    end: end.toISOString(),
+    allDay: true,
+  };
+}
+
+function allDayDay(
+  summary: string,
+  description: string,
+  day: Date
+): ParsedEvent {
+  return allDaySpan(summary, description, day, day);
+}
+
+function pickBound(bounds: WcBound[], mark: 1 | 2): Date | null {
+  const hit = bounds.find((b) => b.mark === mark);
+  if (hit) return hit.date;
+  const single = bounds.find((b) => b.mark == null);
+  return single ? single.date : null;
+}
+
+function termSpansForYear(
+  termN: number,
+  year: number,
+  opensLine: string,
+  closesLine: string
+): ParsedEvent[] {
+  const opens = parseWcBounds(opensLine);
+  const closes = parseWcBounds(closesLine);
+  if (!opens.length || !closes.length) return [];
+
+  const dual =
+    (opens.some((b) => b.mark === 1) || closes.some((b) => b.mark === 1)) &&
+    (opens.some((b) => b.mark === 2) || closes.some((b) => b.mark === 2));
+
+  if (dual) {
+    const openStaff = pickBound(opens, 1);
+    const openLearn = pickBound(opens, 2);
+    const closeStaff = pickBound(closes, 1);
+    const closeLearn = pickBound(closes, 2);
+    if (!openStaff || !openLearn || !closeStaff || !closeLearn) return [];
+    const same =
+      openStaff.getTime() === openLearn.getTime() &&
+      closeStaff.getTime() === closeLearn.getTime();
+    if (!same) {
+      return [
+        allDaySpan(
+          `Term ${termN} ${year} (staff)`,
+          opensLine + " / " + closesLine,
+          openStaff,
+          closeStaff
+        ),
+        allDaySpan(
+          `Term ${termN} ${year} (learners)`,
+          opensLine + " / " + closesLine,
+          openLearn,
+          closeLearn
+        ),
+      ];
+    }
+  }
+
+  const open = opens[0]?.date;
+  const close = closes[closes.length - 1]?.date;
+  if (!open || !close) return [];
+  return [
+    allDaySpan(
+      `Term ${termN} ${year}`,
+      opensLine + " / " + closesLine,
+      open,
+      close
+    ),
+  ];
+}
+
+/**
+ * Western Cape school-calendar HTML: term Opens/Closes → one dated SPAN per
+ * term (DTSTART=opens, DTEND exclusive = day after closes), titled Term N YYYY.
+ * Dual staff/learner bounds → two spans. Holidays stay named all-day days with year.
+ */
+export function parseWesternCapeSchoolCalendarHtml(
+  text: string
+): { title: string; events: ParsedEvent[] } {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const events: ParsedEvent[] = [];
+  let year: number | null = null;
+  let termN: number | null = null;
+  let opensLine: string | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    const yearHead = line.match(/\b(20\d{2})\s+School Calendar\b/i);
+    if (yearHead) {
+      year = Number(yearHead[1]);
+      termN = null;
+      opensLine = null;
+      continue;
+    }
+    const holHead = line.match(/\b(20\d{2})\s+Public Holidays\b/i);
+    if (holHead) {
+      year = Number(holHead[1]);
+      termN = null;
+      opensLine = null;
+      continue;
+    }
+
+    const ord = line.match(/^(First|Second|Third|Fourth)\b/i);
+    if (ord && year != null) {
+      termN = TERM_ORDINAL[ord[1].toLowerCase()] ?? null;
+      opensLine = null;
+      continue;
+    }
+
+    if (termN != null && year != null && /^Opens:/i.test(line)) {
+      opensLine = line;
+      continue;
+    }
+    if (
+      termN != null &&
+      year != null &&
+      opensLine &&
+      /^Closes:/i.test(line)
+    ) {
+      events.push(...termSpansForYear(termN, year, opensLine, line));
+      opensLine = null;
+      termN = null;
+      continue;
+    }
+
+    // "1 January 2026 – New Year's Day"
+    const hol = line.match(
+      new RegExp(
+        String.raw`^(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\s*[–—−-]\s*(.+)$`,
+        "i"
+      )
+    );
+    if (hol) {
+      const month = MONTHS[hol[2].toLowerCase()];
+      const y = Number(hol[3]);
+      const date = month == null ? null : parseDateParts(Number(hol[1]), month, y);
+      const name = hol[4].replace(/\s+/g, " ").trim();
+      if (date && name.length >= 3 && !isJunkSummary(name)) {
+        events.push(
+          allDayDay(`${name} ${y}`, line, date)
+        );
+      }
+    }
+  }
+
+  return {
+    title: "School Calendar | Western Cape Government",
+    events,
+  };
+}
+
+/**
+ * English WCED planning PDF: emit only clearly titled observances / named days
+ * from the religious-observances tables. Untitled or admin-deadline mush is dropped.
+ */
+export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
+  const cleaned = text.replace(/\u00a0/g, " ");
+  const events: ParsedEvent[] = [];
+  const seen = new Set<string>();
+
+  function push(summary: string, day: Date, endDay?: Date) {
+    const s = summary.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!s || isJunkSummary(s) || WEEKDAY_ONLY.test(s)) return;
+    if (/\b(sunset)\b/i.test(s) && !/^sukkot\b/i.test(s)) {
+      // keep "Sukkot" without glued "(sunset)" noise when we can
+    }
+    const start = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    const last = endDay
+      ? new Date(endDay.getFullYear(), endDay.getMonth(), endDay.getDate())
+      : start;
+    const key = `${s}|${start.toISOString()}|${last.toISOString()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    events.push(allDaySpan(s, s, start, last));
+  }
+
+  function isObservanceLabel(label: string): boolean {
+    return /(eid|passover|ascension|shavuot|rosh\s*hashana|yom\s*kippur|sukkot|shemini|simchat|diwali)/i.test(
+      label
+    );
+  }
+
+  // Same-line observances (weekday may be glued: "Ascension DayThursday14 May 2026")
+  const namedDay = new RegExp(
+    String.raw`((?:Eid ul Fitr|Eid ul Adha|Passover|Ascension Day|Shavuot|Rosh Hashana|Yom Kippur|Sukkot|Shemini Atzeret and Simchat Torah|Diwali)(?:\s*\(date may vary\))?)\s*(?:${WEEKDAY_ALT})?\s*(?:\(?sunset\)?)?\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+    "gi"
+  );
+  let m: RegExpExecArray | null;
+  while ((m = namedDay.exec(cleaned)) !== null) {
+    const label = m[1].replace(/\s+/g, " ").trim();
+    const month = MONTHS[m[3].toLowerCase()];
+    if (month == null) continue;
+    const date = parseDateParts(Number(m[2]), month, Number(m[4]));
+    if (!date) continue;
+    push(label, date);
+  }
+
+  // Multi-line religious blocks: label then date lines
+  const lines = cleaned.split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim());
+  for (let i = 0; i < lines.length; i++) {
+    let name = lines[i];
+    if (/^Shemini Atzeret and Simchat$/i.test(name) && /torah/i.test(lines[i + 1] || "")) {
+      name = "Shemini Atzeret and Simchat Torah";
+    }
+    if (!isObservanceLabel(name)) continue;
+    if (/^(Eid ul Fitr|Eid ul Adha|Ascension Day|Yom Kippur|Sukkot|Diwali)\b/i.test(name)) {
+      // Usually handled by same-line pattern; still allow multi-line dates below
+    }
+    const dates: Date[] = [];
+    for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+      const dm = lines[j].match(
+        new RegExp(String.raw`^(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})$`, "i")
+      );
+      if (dm) {
+        const month = MONTHS[dm[2].toLowerCase()];
+        if (month == null) continue;
+        const d = parseDateParts(Number(dm[1]), month, Number(dm[3]));
+        if (d) dates.push(d);
+        continue;
+      }
+      if (WEEKDAY_ONLY.test(lines[j])) continue;
+      if (/^\(?sunset\)?$/i.test(lines[j])) continue;
+      if (/^Torah$/i.test(lines[j])) continue;
+      if (dates.length) break;
+      if (/^[A-Za-z]/.test(lines[j]) && !WEEKDAY_ONLY.test(lines[j])) break;
+    }
+    for (const d of dates) push(name, d);
+  }
+
+  return events;
+}
+
 /**
  * Conservative dated-event extractor for HTML/PDF plain text.
  * Year is required on the line, or inherited only for written date ranges and
  * holiday lines when a document-level year is known (title, filename, or a
  * clear calendar year already on the page). Never invents days from outline
  * numbers; never uses SUMMARY "Watched event". Returns [] when none found.
+ *
+ * Western Cape school-calendar HTML is a special case: terms become year-titled
+ * SPANS (not yearless open/close dots); holidays keep the year in the name.
  */
 export function parseSourceText(
   text: string,
@@ -523,6 +979,15 @@ export function parseSourceText(
   const cleaned = dropChromeLines(text.replace(/\u00a0/g, " ").trim());
   const title = pageTitle(cleaned);
   if (!cleaned) return { title: "WatchCal feed", events: [] };
+
+  if (
+    looksLikeWesternCapeSchoolCalendar(cleaned) ||
+    (opts?.sourceUrl && isWesternCapeSchoolCalendarUrl(opts.sourceUrl))
+  ) {
+    if (looksLikeWesternCapeSchoolCalendar(cleaned)) {
+      return parseWesternCapeSchoolCalendarHtml(cleaned);
+    }
+  }
 
   const inheritYear = inferDocumentYear(cleaned, opts);
   const dates = findDates(cleaned, inheritYear);

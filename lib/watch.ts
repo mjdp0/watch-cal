@@ -15,7 +15,12 @@
 
 import { eventsToIcs } from "./ics";
 import { assertPublicHttpUrl, fetchSource } from "./fetchSource";
-import { parseSourceText } from "./parseSource";
+import {
+  isWesternCapeSchoolCalendarUrl,
+  parseSourceText,
+  parseWesternCapePlanningPdf,
+  WESTERN_CAPE_PLANNING_PDF_URL,
+} from "./parseSource";
 import {
   createWatchAtomic,
   findWatchBySourceUrl,
@@ -26,7 +31,7 @@ import {
   sourceUrlFromWatchId,
   watchIdFromSourceUrl,
 } from "./store";
-import type { WatchRecord } from "./types";
+import type { ParsedEvent, WatchRecord } from "./types";
 
 /** Default staleness before on-read refresh (15 minutes). */
 export const REFRESH_INTERVAL_MS = Number(
@@ -56,6 +61,40 @@ function isStale(watch: WatchRecord, now: Date): boolean {
   if (!watch.lastFetchedAt) return true;
   const last = new Date(watch.lastFetchedAt).getTime();
   return now.getTime() - last >= REFRESH_INTERVAL_MS;
+}
+
+/**
+ * Parse primary source; for the Western Cape school-calendar page also ingest
+ * the English planning PDF linked on that page into the same watch.
+ */
+async function parseWatchSource(
+  sourceUrl: string,
+  fetchedText: string,
+  fetchedTitle: string,
+  now: Date,
+  fetcher: typeof fetch
+): Promise<{ title: string; events: ParsedEvent[]; hashMaterial: string }> {
+  const { title, events } = parseSourceText(fetchedText, now, {
+    sourceTitle: fetchedTitle,
+    sourceUrl,
+  });
+  let all = events;
+  let hashMaterial = fetchedText;
+  if (isWesternCapeSchoolCalendarUrl(sourceUrl)) {
+    try {
+      const pdf = await fetchSource(WESTERN_CAPE_PLANNING_PDF_URL, fetcher);
+      const planning = parseWesternCapePlanningPdf(pdf.text);
+      all = [...events, ...planning];
+      hashMaterial = fetchedText + "\n" + pdf.text;
+    } catch {
+      // Terms + holidays from the HTML still ship; planning may be 0.
+    }
+  }
+  return {
+    title: fetchedTitle || title || "WatchCal",
+    events: all,
+    hashMaterial,
+  };
 }
 
 function stubWatch(id: string, sourceUrl: string, now: Date): WatchRecord {
@@ -120,20 +159,29 @@ export async function refreshWatch(
   if (!opts.force && !isStale(watch, now)) return watch;
 
   const fetched = await fetchSource(watch.sourceUrl, opts.fetcher);
-  const sourceHash = hashContent(fetched.text);
-  const { title, events } = parseSourceText(fetched.text, now, {
-    sourceTitle: fetched.title,
-    sourceUrl: watch.sourceUrl,
-  });
-  const calName = fetched.title || title || "WatchCal";
-  const ics = eventsToIcs(watch.id, calName, events, now, watch.sourceUrl);
+  const parsed = await parseWatchSource(
+    watch.sourceUrl,
+    fetched.text,
+    fetched.title,
+    now,
+    opts.fetcher ?? fetch
+  );
+  const sourceHash = hashContent(parsed.hashMaterial);
+  const calName = parsed.title;
+  const ics = eventsToIcs(
+    watch.id,
+    calName,
+    parsed.events,
+    now,
+    watch.sourceUrl
+  );
 
   const contentChanged =
     watch.sourceHash == null || watch.sourceHash !== sourceHash;
   const updated: WatchRecord = {
     ...watch,
     title: calName,
-    events,
+    events: parsed.events,
     ics,
     sourceHash,
     lastFetchedAt: now.toISOString(),
@@ -162,15 +210,17 @@ export async function previewUrl(
   const normalized = assertPublicHttpUrl(sourceUrl).toString();
   const now = opts.now ?? new Date();
   const fetched = await fetchSource(normalized, opts.fetcher);
-  const { title, events } = parseSourceText(fetched.text, now, {
-    sourceTitle: fetched.title,
-    sourceUrl: normalized,
-  });
-  const calName = fetched.title || title || "WatchCal";
+  const parsed = await parseWatchSource(
+    normalized,
+    fetched.text,
+    fetched.title,
+    now,
+    opts.fetcher ?? fetch
+  );
   return {
     source_url: normalized,
-    title: calName,
-    event_count: events.length,
+    title: parsed.title,
+    event_count: parsed.events.length,
   };
 }
 
@@ -201,13 +251,16 @@ export async function watchUrl(
   const fetched = await fetchSource(normalized, opts.fetcher);
 
   const id = watchIdFromSourceUrl(normalized);
-  const sourceHash = hashContent(fetched.text);
-  const { title, events } = parseSourceText(fetched.text, now, {
-    sourceTitle: fetched.title,
-    sourceUrl: normalized,
-  });
-  const calName = fetched.title || title || "WatchCal";
-  const ics = eventsToIcs(id, calName, events, now, normalized);
+  const parsed = await parseWatchSource(
+    normalized,
+    fetched.text,
+    fetched.title,
+    now,
+    opts.fetcher ?? fetch
+  );
+  const sourceHash = hashContent(parsed.hashMaterial);
+  const calName = parsed.title;
+  const ics = eventsToIcs(id, calName, parsed.events, now, normalized);
   const created = await createWatchAtomic(
     {
       id,
@@ -217,7 +270,7 @@ export async function watchUrl(
       lastFetchedAt: now.toISOString(),
       sourceHash,
       title: calName,
-      events,
+      events: parsed.events,
       ics,
     },
     opts.dataPath

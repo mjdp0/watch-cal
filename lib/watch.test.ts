@@ -61,7 +61,7 @@ describe("assertPublicHttpUrl", () => {
 });
 
 describe("homepage examples and copy", () => {
-  it("extra examples dry-run via /api/preview; free example may create a watch", async () => {
+  it("extra examples preview via /api/preview; free example may create a watch", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
@@ -74,7 +74,7 @@ describe("homepage examples and copy", () => {
     // Extra tiles must not POST /api/watches — that 402 + existing feed looked like a parse fail
     assert.match(
       page,
-      /never POST \/api\/watches|Extra examples dry-run/i
+      /never POST \/api\/watches|Extra examples preview/i
     );
     // 402 must not hydrate the free watch under the new URL
     assert.doesNotMatch(
@@ -85,32 +85,41 @@ describe("homepage examples and copy", () => {
       page,
       /Do not hydrate the free watch|looks like a failed parse/
     );
-    // 402 error must name pay-once extra watch, not parse failure
-    assert.match(page, /This URL needs a pay-once extra watch/);
+    // 402 error must use parent pay-once words, not engineer jargon
+    assert.match(page, /First calendar free\. Another school is \$5 once/);
     assert.match(
       page,
       /if \(res\.status === 402 \|\| res\.status === 403\) \{\s*setNeedsExtraWatch\(true\);\s*setError\(/
     );
   });
 
-  it("extra example tiles show Extra / $5 (no feedId); only proven extras ship", async () => {
+  it("WC tile is terms + planning (partial); Stithians Extra stays hidden", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
+    // Extra / $5 label wiring remains for a future proven tile — none ship today
     assert.match(
       page,
       /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
     );
-    assert.match(page, /St Stithians/);
-    // NSC was never proven via Node fetch — omitted rather than half-baked
+    // Stithians PDF is not the calendar a parent would read yet — tile omitted
+    assert.doesNotMatch(page, /School calendar \(St /);
+    assert.doesNotMatch(
+      page,
+      /stithian\.com\/uploads\/files\/St_Stithians_College_Calendar_2026/
+    );
+    // NSC exam URLs are other pages — not scraped / not tiled
     assert.doesNotMatch(page, /NSC exams/);
     assert.doesNotMatch(
       page,
       /url:\s*"https:\/\/www\.education\.gov\.za/
     );
-    // Free Western Cape tile keeps feedId — not labeled Extra / $5 in the EXAMPLES entry
+    assert.doesNotMatch(page, /wikipedia\.org/i);
     assert.match(page, /feedId: WESTERN_CAPE_FEED_ID/);
+    assert.match(page, /Western Cape terms \+ planning \(partial\)/);
+    assert.doesNotMatch(page, /Western Cape calendar/i);
+    assert.doesNotMatch(page, /term open\/close \(partial\)/);
   });
 
   it("copy invites a public https link; dates land in the phone calendar", async () => {
@@ -141,22 +150,40 @@ describe("homepage examples and copy", () => {
     assert.doesNotMatch(page, /type=["']file["']/);
   });
 
-  it("after extra preview, shows Polar pay-once checkout CTA (no dead-end)", async () => {
+  it("Add to phone keeps webcal/https hrefs; footer is parent $5 once (not Polar SaaS)", async () => {
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.match(page, /Add to phone:/);
+    assert.match(page, /href=\{feedLinks\.webcal_url\}/);
+    assert.match(page, /href=\{feedLinks\.https_url\}/);
+    assert.doesNotMatch(page, /Already live:/);
+    assert.match(page, /First calendar free\. Another school is \$5 once\./);
+    assert.doesNotMatch(page, /billed SaaS|pay-once Polar/i);
+    assert.doesNotMatch(page, /Dry-run preview|quota untouched|this instance/i);
+    assert.doesNotMatch(page, /· id \{watch\.id\}/);
+  });
+
+  it("after extra preview, shows pay-once checkout CTA (no dead-end)", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
     assert.match(page, /setPreview\(data\.payload\)/);
     assert.match(page, /setNeedsExtraWatch\(true\)/);
-    assert.match(page, /preview-checkout|preview && \([\s\S]*Pay once for one extra watch/);
-    assert.match(page, /First watch stays free/);
-    assert.match(page, /\$5 one-time/);
+    assert.match(
+      page,
+      /preview-checkout|preview && \([\s\S]*Pay \$5 once for another school/
+    );
+    assert.match(page, /First calendar free/);
+    assert.match(page, /\$5 once/);
     assert.match(page, /startExtraWatchCheckout/);
     assert.match(page, /\/api\/polar\/checkout/);
     // Preview path must not mint a watch
     assert.match(
       page,
-      /never POST \/api\/watches|Extra examples dry-run/i
+      /never POST \/api\/watches|Extra examples preview/i
     );
   });
 
@@ -326,122 +353,154 @@ describe("parseSource", () => {
     assert.equal(events.length, 0);
   });
 
-  it("titles Western Cape Opens/Closes rows as Term N opens/closes; dual (1)/(2) labelled staff vs learners", () => {
-    // Mirrors https://www.westerncape.gov.za/education/school-calendar structure:
-    // (1) Educators / (2) Learners + ordinal heading + Opens/Closes (incl. dual dates).
-    const html = `
-      <html><head><title>School Calendar | Western Cape Government</title></head>
-      <body>
-        <p><strong>(1) for Educators</strong><br><strong>(2) for Learners</strong></p>
-        <p><strong>Terms (All Provinces)</strong></p>
-        <p><strong>First</strong></p>
-        <ul>
-          <li>Opens: 12 January 2026 <strong>(1)</strong> | 14 January 2026 <strong>(2)</strong></li>
-          <li>Closes: 27 March 2026</li>
-        </ul>
-        <p><strong>Second</strong></p>
-        <ul>
-          <li>Opens: 8 April 2026</li>
-          <li>Closes: 26 June 2026</li>
-        </ul>
-        <p><strong>Third</strong></p>
-        <ul>
-          <li>Opens: 21 July 2026</li>
-          <li>Closes: 23 September 2026</li>
-        </ul>
-        <p><strong>Fourth</strong></p>
-        <ul>
-          <li>Opens: 6 October 2026</li>
-          <li>Closes: 9 December 2026 <strong>(2)</strong> | 11 December 2026 <strong>(1)</strong></li>
-        </ul>
-        <h4>2026 Public Holidays (Including School Holidays)</h4>
-        <p>1 January 2026 – New Year’s Day</p>
-        <p>21 March 2026 – Human Rights Day</p>
-        <p>3 April 2026 – Good Friday</p>
-      </body></html>
-    `;
-    const { text } = htmlToText(html);
-    const { events } = parseSourceText(text, new Date("2026-08-23T00:00:00Z"), {
+  it("titles Western Cape Opens/Closes as Term N YYYY spans (not yearless open/close dots)", async () => {
+    // Recorded htmlToText extract of https://www.westerncape.gov.za/education/school-calendar
+    const text = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-school-calendar-extract.txt"
+      ),
+      "utf8"
+    );
+    const { events } = parseSourceText(text, new Date("2026-08-24T00:00:00Z"), {
       sourceTitle: "School Calendar | Western Cape Government",
       sourceUrl: "https://www.westerncape.gov.za/education/school-calendar",
     });
 
+    // No yearless open/close rewrite
     for (const e of events) {
-      assert.doesNotMatch(e.summary, /^(Opens|Closes)$/i);
-      assert.doesNotMatch(e.summary, /^\(\d+\)/);
+      assert.doesNotMatch(e.summary, /^Term \d+ opens/i);
+      assert.doesNotMatch(e.summary, /^Term \d+ closes/i);
     }
 
-    // Dual Term 1 opens must not share one identical title in a phone calendar.
-    const term1Staff = events.find(
-      (e) =>
-        e.summary === "Term 1 opens (staff)" && e.start.startsWith("2026-01-12")
-    );
-    const term1Learners = events.find(
-      (e) =>
-        e.summary === "Term 1 opens (learners)" &&
-        e.start.startsWith("2026-01-14")
-    );
-    assert.ok(term1Staff, "12 Jan = educators/staff");
-    assert.ok(term1Learners, "14 Jan = learners");
+    const t1Staff = events.find((e) => e.summary === "Term 1 2026 (staff)");
+    const t1Learn = events.find((e) => e.summary === "Term 1 2026 (learners)");
+    assert.ok(t1Staff, "Term 1 2026 staff span");
+    assert.ok(t1Learn, "Term 1 2026 learners span");
+    assert.match(t1Staff!.start, /^2026-01-12/);
+    assert.match(t1Staff!.end, /^2026-03-28/); // exclusive day after 27 March
+    assert.match(t1Learn!.start, /^2026-01-14/);
+    assert.match(t1Learn!.end, /^2026-03-28/);
+
+    const t2 = events.find((e) => e.summary === "Term 2 2026");
+    assert.ok(t2);
+    assert.match(t2!.start, /^2026-04-08/);
+    assert.match(t2!.end, /^2026-06-27/);
+
+    const t4Staff = events.find((e) => e.summary === "Term 4 2026 (staff)");
+    const t4Learn = events.find((e) => e.summary === "Term 4 2026 (learners)");
+    assert.ok(t4Staff);
+    assert.ok(t4Learn);
+    assert.match(t4Staff!.start, /^2026-10-06/);
+    assert.match(t4Staff!.end, /^2026-12-12/); // day after 11 Dec
+    assert.match(t4Learn!.end, /^2026-12-10/); // day after 9 Dec
+
+    // 2026 vs 2027 do not collapse
+    assert.ok(events.some((e) => e.summary === "Term 1 2027 (staff)"));
+    assert.ok(events.some((e) => e.summary === "Term 2 2027"));
     assert.equal(
-      events.filter((e) => e.summary === "Term 1 opens").length,
-      0,
-      "dual opens must be labelled, not bare Term 1 opens ×2"
+      events.filter((e) => e.summary === "Term 1 2026 (staff)").length,
+      1
     );
-
-    const term1Close = events.find(
-      (e) => e.summary === "Term 1 closes" && e.start.startsWith("2026-03-27")
-    );
-    assert.ok(term1Close, "single close stays unlabelled");
-
-    assert.ok(
-      events.some(
-        (e) => e.summary === "Term 2 opens" && e.start.startsWith("2026-04-08")
-      )
-    );
-    assert.ok(
-      events.some(
-        (e) => e.summary === "Term 2 closes" && e.start.startsWith("2026-06-26")
-      )
-    );
-    assert.ok(
-      events.some(
-        (e) => e.summary === "Term 3 opens" && e.start.startsWith("2026-07-21")
-      )
-    );
-    assert.ok(
-      events.some(
-        (e) => e.summary === "Term 3 closes" && e.start.startsWith("2026-09-23")
-      )
-    );
-    assert.ok(
-      events.some(
-        (e) => e.summary === "Term 4 opens" && e.start.startsWith("2026-10-06")
-      )
-    );
-    const term4Learners = events.find(
-      (e) =>
-        e.summary === "Term 4 closes (learners)" &&
-        e.start.startsWith("2026-12-09")
-    );
-    const term4Staff = events.find(
-      (e) =>
-        e.summary === "Term 4 closes (staff)" &&
-        e.start.startsWith("2026-12-11")
-    );
-    assert.ok(term4Learners, "9 Dec = learners (2)");
-    assert.ok(term4Staff, "11 Dec = staff (1)");
     assert.equal(
-      events.filter((e) => e.summary === "Term 4 closes").length,
-      0,
-      "dual closes must be labelled"
+      events.filter((e) => e.summary === "Term 1 2027 (staff)").length,
+      1
     );
 
-    const nye = events.find((e) => /New Year/i.test(e.summary));
-    assert.ok(nye, "named public holidays stay named");
-    assert.match(nye!.start, /^2026-01-01/);
-    assert.ok(events.some((e) => /Human Rights/i.test(e.summary)));
-    assert.ok(events.some((e) => /Good Friday/i.test(e.summary)));
+    const nye2026 = events.find((e) => e.summary === "New Year’s Day 2026");
+    const nye2027 = events.find((e) => e.summary === "New Year’s Day 2027");
+    assert.ok(nye2026, "holiday keeps 2026");
+    assert.ok(nye2027, "holiday keeps 2027");
+    assert.match(nye2026!.start, /^2026-01-01/);
+    assert.match(nye2027!.start, /^2027-01-01/);
+    assert.ok(events.some((e) => e.summary === "Good Friday 2026"));
+    assert.ok(events.some((e) => e.summary === "Good Friday 2027"));
+  });
+
+  it("Western Cape planning PDF fixture emits titled observances (source wording)", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    const extract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const events = parseWesternCapePlanningPdf(extract);
+    assert.ok(events.length > 0, "planning observances emit");
+    assert.ok(events.some((e) => /Eid ul Fitr/i.test(e.summary)));
+    assert.ok(events.some((e) => e.summary === "Passover"));
+    assert.ok(events.some((e) => e.summary === "Diwali"));
+    assert.ok(events.some((e) => e.summary === "Ascension Day"));
+    for (const e of events) {
+      assert.doesNotMatch(
+        e.summary,
+        /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/i
+      );
+      assert.match(e.start, /^2026-/);
+    }
+    // Not the full admin deadline calendar — only titled observances
+    assert.doesNotMatch(
+      events.map((e) => e.summary).join("\n"),
+      /Snap Survey|job descriptions|CEMIS/i
+    );
+  });
+
+  it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {
+    // Recorded pdf-parse extract of
+    // St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf — not a live fetch.
+    const extract = await readFile(
+      path.join(process.cwd(), "lib/fixtures/st-stithians-2026-extract.txt"),
+      "utf8"
+    );
+    assert.match(extract, /Term Commences Wednesday 14 January/);
+    assert.match(extract, /School Closes for the Holidays/);
+    assert.match(extract, /Half Term/);
+
+    const { events } = parseSourceText(extract, new Date("2026-08-24T00:00:00Z"), {
+      sourceTitle: "St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf",
+      sourceUrl:
+        "https://www.stithian.com/uploads/files/St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf",
+    });
+
+    // Honesty: emit source labels, not weekday-only crumbs. This is still an
+    // incomplete reshape of the PDF (term/holiday column ranges, multi-day
+    // festivals, half-term spans, staff notes) — not shippable as Extra.
+    for (const e of events) {
+      assert.doesNotMatch(
+        e.summary,
+        /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/i,
+        `weekday crumb: ${e.summary}`
+      );
+      assert.doesNotMatch(
+        e.summary,
+        /^TERM\s*\d*\s*(May|January|April|August|September)?$/i,
+        `term-header crumb: ${e.summary}`
+      );
+    }
+    assert.ok(
+      events.some((e) => e.summary === "Term Commences"),
+      "PDF wording Term Commences kept when present"
+    );
+    assert.ok(
+      events.some((e) => /School Closes for the Holidays/i.test(e.summary)),
+      "PDF wording School Closes kept when present"
+    );
+    assert.ok(
+      events.some((e) => /^Half Term$/i.test(e.summary)),
+      "PDF wording Half Term kept when present"
+    );
+
+    // Tile must stay hidden — incomplete parse is incomplete (count is not progress)
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.doesNotMatch(
+      page,
+      /stithian\.com\/uploads\/files\/St_Stithians_College_Calendar_2026/
+    );
+    assert.doesNotMatch(page, /School calendar \(St /);
   });
 });
 
