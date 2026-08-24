@@ -817,6 +817,74 @@ describe("parseSource", () => {
       "#152 YCAP registration"
     );
 
+    // Next parent-usable batch (RCL / enrichment / School Safety — PDF due-date cells)
+    must(
+      /^Induction of new RCLs$/,
+      "2026-03-02",
+      "2026-03-28",
+      "#65 Induction of new RCLs"
+    );
+    must(
+      /^Election of RCL office-bearers and governing body learner representatives$/,
+      "2026-03-06",
+      "2026-03-07",
+      "#66 RCL office-bearers election"
+    );
+    must(
+      /^Election of District and Provincial Council of Learners Forums$/,
+      "2026-03-09",
+      "2026-03-24",
+      "#67 District and Provincial Council of Learners Forums"
+    );
+    must(
+      /^Closing date for applications for the provincial skills competition$/,
+      "2026-06-19",
+      "2026-06-20",
+      "#145 provincial skills competition applications close"
+    );
+    must(
+      /^Schools Democracy Month$/,
+      "2026-04-08",
+      "2026-05-01",
+      "#149 Schools Democracy Month"
+    );
+    must(
+      /^School Safety Summit$/,
+      "2026-05-09",
+      "2026-05-10",
+      "#153 School Safety Summit"
+    );
+    must(
+      /^RCL [–—−-] conference$/,
+      "2026-05-23",
+      "2026-05-24",
+      "#155 RCL conference"
+    );
+    must(
+      /^INkosi Albert Luthuli [–—−-] provincial competition$/,
+      "2026-08-01",
+      "2026-08-02",
+      "#220 INkosi Albert Luthuli provincial competition"
+    );
+    must(
+      /^Heritage Education Schools Outreach Programme [–—−-] provincial competition$/,
+      "2026-08-15",
+      "2026-08-16",
+      "#222 Heritage Education provincial competition"
+    );
+    must(
+      /^School Safety Round Table [–—−-] rural$/,
+      "2026-08-15",
+      "2026-08-16",
+      "#223 School Safety Round Table rural"
+    );
+    must(
+      /^School Safety Round Table [–—−-] urban$/,
+      "2026-08-22",
+      "2026-08-23",
+      "#224 School Safety Round Table urban"
+    );
+
     // #209 PDF is month-only ("August 2026") — must NOT invent 31 Jul or 1–31 Aug
     const mayJuneResults = events.filter((e) =>
       /Release of May\/June NSC\/SC examination results/i.test(e.summary)
@@ -1007,6 +1075,54 @@ describe("parseSource", () => {
     );
     assert.ok(hp227, "#227 must follow moved Sep/Oct cell");
     assert.match(hp227!.end, /^2026-10-04/);
+
+    // Batch-6: Analyst enrichment / RCL rows follow their due-date cells
+    const moved65 = extract.replace(
+      /(65\.\s+Induction\s+of\s+new\s+RCLs\s+)02 to 27 March 2026/,
+      "$103 to 28 March 2026"
+    );
+    assert.match(moved65, /65\.[\s\S]*?03 to 28 March 2026/);
+    const events65 = parseWesternCapePlanningPdf(moved65);
+    const induction = events65.find((e) => e.summary === "Induction of new RCLs");
+    assert.ok(induction, "#65 must emit after cell move");
+    assert.match(induction!.start, /^2026-03-03/);
+    assert.match(induction!.end, /^2026-03-29/);
+    assert.doesNotMatch(induction!.start, /^2026-03-02/);
+
+    const moved153 = extract.replace(
+      /(153\.\s+School\s+Safety\s+Summit\s+)09 May 2026/,
+      "$110 May 2026"
+    );
+    assert.match(moved153, /153\.[\s\S]*?10 May 2026/);
+    const events153 = parseWesternCapePlanningPdf(moved153);
+    const summit = events153.find((e) => e.summary === "School Safety Summit");
+    assert.ok(summit, "#153 must follow moved May cell");
+    assert.match(summit!.start, /^2026-05-10/);
+    assert.match(summit!.end, /^2026-05-11/);
+    assert.doesNotMatch(summit!.start, /^2026-05-09/);
+
+    const moved220 = extract.replace(
+      /(220\.\s+INkosi\s+Albert\s+Luthuli\s*[–—−-]\s*provincial\s+competition\s+)01 August 2026/,
+      "$102 August 2026"
+    );
+    assert.match(moved220, /220\.[\s\S]*?02 August 2026/);
+    const events220 = parseWesternCapePlanningPdf(moved220);
+    const luthuli = events220.find(
+      (e) => e.summary === "INkosi Albert Luthuli – provincial competition"
+    );
+    assert.ok(luthuli, "#220 must follow moved August cell");
+    assert.match(luthuli!.start, /^2026-08-02/);
+    assert.match(luthuli!.end, /^2026-08-03/);
+    assert.doesNotMatch(luthuli!.start, /^2026-08-01/);
+
+    // Neighbour #154 must not steal #153’s summit day when #153 moves
+    const ycap154 = events153.find(
+      (e) =>
+        e.summary === "YCAP – provincial workshop (virtual)" &&
+        e.start.startsWith("2026-05-15")
+    );
+    assert.ok(ycap154, "#154 must keep 15 May when #153 moves");
+    assert.doesNotMatch(ycap154!.start, /^2026-05-10/);
   });
 
   it("Safe Schools Holiday Programme rows keep distinct due-date spans", async () => {
