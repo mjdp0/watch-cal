@@ -103,8 +103,9 @@ describe("homepage examples and copy", () => {
       page,
       /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
     );
-    assert.match(page, /Ridgewood College terms 2026/);
+    assert.match(page, /Ridgewood College terms \+ holidays 2026/);
     assert.match(page, /ridgewoodcollege\.co\.za\/term-dates\//);
+    assert.doesNotMatch(page, /Ridgewood College terms 2026(?!\s*\+)/);
     // Stithians PDF is not the calendar a parent would read yet — tile omitted
     assert.doesNotMatch(page, /School calendar \(St /);
     assert.doesNotMatch(
@@ -1671,10 +1672,11 @@ describe("parseSource", () => {
     );
   });
 
-  it("Ridgewood term-dates fixture: Term N YYYY spans match page START/CLOSE periods", async () => {
+  it("Ridgewood term-dates fixture: terms + half terms + named holidays from page", async () => {
     const { parseSourceText, looksLikeTermStartCloseCalendar } = await import(
       "./parseSource"
     );
+    const { eventsToIcs } = await import("./ics");
     const extract = await readFile(
       path.join(
         process.cwd(),
@@ -1686,34 +1688,100 @@ describe("parseSource", () => {
       looksLikeTermStartCloseCalendar(extract),
       "fixture must look like START:/CLOSE: term calendar"
     );
+    // Holiday Club 2021 PDF must stay unread — not a 2026 parent calendar
+    assert.doesNotMatch(extract, /Holiday Club|PREP-2021|\.pdf/i);
     const { events, title } = parseSourceText(extract, new Date("2026-08-24"), {
       sourceTitle: "Term Dates – Ridgewood College",
       sourceUrl: "https://ridgewoodcollege.co.za/term-dates/",
     });
     assert.match(title, /Ridgewood|Term Dates/i);
-    // Exact periods from live page START:/CLOSE: with years — not half-term crumbs
-    function mustSpan(summary: string, startYmd: string, endExclusiveYmd: string) {
+    function mustSpan(
+      summary: string,
+      startYmd: string,
+      endExclusiveYmd: string,
+      allDay = true
+    ) {
       const hit = events.find(
         (e) =>
           e.summary === summary &&
           e.start.startsWith(startYmd) &&
-          e.end.startsWith(endExclusiveYmd)
+          e.end.startsWith(endExclusiveYmd) &&
+          e.allDay === allDay
       );
       assert.ok(
         hit,
-        `missing ${summary} ${startYmd}→${endExclusiveYmd}; got ${events
-          .map((e) => `${e.summary}|${e.start.slice(0, 10)}→${e.end.slice(0, 10)}`)
+        `missing ${summary} ${startYmd}→${endExclusiveYmd} allDay=${allDay}; got ${events
+          .map(
+            (e) =>
+              `${e.summary}|${e.start}|${e.end}|allDay=${e.allDay}`
+          )
           .join("; ")}`
       );
+      return hit!;
     }
-    assert.equal(events.length, 3, "only three year-stamped term spans");
+    // Three term spans from year-stamped START:/CLOSE:
     mustSpan("Term 1 2026", "2026-01-14", "2026-04-11");
     mustSpan("Term 2 2026", "2026-05-06", "2026-08-08");
     mustSpan("Term 3 2026", "2026-09-09", "2026-12-05");
-    // Yearless half-term CLOSE / RETURN / holidays — not invented
-    assert.ok(!events.some((e) => /half\s*term|return|holiday|easter/i.test(e.summary)));
-    assert.ok(!events.some((e) => e.start.startsWith("2026-02-19")));
-    assert.ok(!events.some((e) => /^START:/i.test(e.summary)));
+
+    // Half terms: CLOSE→RETURN from the same block (term year inherited)
+    const ht1 = events.find(
+      (e) =>
+        e.summary === "Half Term (Mid-Term Break)" &&
+        e.start.startsWith("2026-02-19")
+    );
+    assert.ok(ht1, "T1 half term from CLOSE 19 Feb");
+    assert.equal(ht1!.allDay, false, "12h00 close is timed SAST");
+    assert.equal(ht1!.timeZone, "Africa/Johannesburg");
+    assert.match(ht1!.start, /T10:00:00\.000Z$/, "12:00 SAST = 10:00Z");
+    assert.match(ht1!.end, /^2026-02-23T22:00:00\.000Z$/, "RETURN Tue 24 Feb 00:00 SAST");
+
+    mustSpan("Half Term (Mid-Term Break)", "2026-06-26", "2026-07-06", true);
+    const ht3 = events.find(
+      (e) =>
+        e.summary === "Half Term (Mid-Term Break)" &&
+        e.start.startsWith("2026-10-22")
+    );
+    assert.ok(ht3, "T3 half term from CLOSE 22 Oct");
+    assert.equal(ht3!.allDay, false);
+    assert.equal(ht3!.timeZone, "Africa/Johannesburg");
+    assert.match(ht3!.start, /T10:00:00\.000Z$/);
+    assert.match(ht3!.end, /^2026-10-26T22:00:00\.000Z$/);
+
+    // Named school/public holidays from the page rows
+    mustSpan("Human Rights Day", "2026-03-21", "2026-03-22");
+    mustSpan("School Holiday", "2026-03-22", "2026-03-23");
+    mustSpan("Easter Weekend", "2026-03-29", "2026-04-02");
+    mustSpan("Easter", "2026-04-03", "2026-04-07");
+    mustSpan("Holiday", "2026-06-15", "2026-06-16");
+    mustSpan("Youth Day", "2026-06-16", "2026-06-17");
+    mustSpan("Heritage Day", "2026-09-24", "2026-09-25");
+    mustSpan("Holiday", "2026-09-25", "2026-09-26");
+
+    assert.equal(events.length, 14, `expected 3 terms + 3 half + 8 holidays; got ${events.length}`);
+    assert.ok(!events.some((e) => /^START:|^CLOSE:|^RETURN:/i.test(e.summary)));
+    // Do not invent bounds from neighbouring rows (e.g. term CLOSE as half-term end)
+    assert.ok(
+      !events.some(
+        (e) =>
+          e.summary === "Half Term (Mid-Term Break)" &&
+          e.end.startsWith("2026-04-11")
+      )
+    );
+
+    const ics = eventsToIcs(
+      "ridgewood-test",
+      title,
+      events,
+      new Date("2026-08-24T12:00:00Z"),
+      "https://ridgewoodcollege.co.za/term-dates/"
+    );
+    assert.match(
+      ics,
+      /DTSTART;TZID=Africa\/Johannesburg:20260219T120000[\s\S]*?DTEND;TZID=Africa\/Johannesburg:20260224T000000[\s\S]*?SUMMARY:Half Term \(Mid-Term Break\)/
+    );
+    assert.match(ics, /SUMMARY:Human Rights Day/);
+    assert.match(ics, /DTSTART;VALUE=DATE:20260321/);
   });
 
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {

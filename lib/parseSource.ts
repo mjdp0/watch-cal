@@ -1759,8 +1759,9 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
 
 /**
  * Independent-school term pages with year-stamped START:/CLOSE: under Term N
- * (e.g. Ridgewood College). Emit Term N YYYY spans only. Half-term CLOSE lines
- * without a year are skipped — do not invent days or holiday periods.
+ * (e.g. Ridgewood College). Emit Term N YYYY spans, then that term’s half-term
+ * CLOSE→RETURN and named Public Holiday lines using the term year (dates only
+ * from the same row/block — never invent bounds or steal the next row’s day).
  */
 export function looksLikeTermStartCloseCalendar(text: string): boolean {
   return (
@@ -1783,40 +1784,249 @@ function ymdOnLine(line: string): Date | null {
   return parseDateParts(Number(m[1]), month, Number(m[3]));
 }
 
+/** Day+month on a line; optional (12h00) clock — year inherited from the term. */
+function mdOnLine(
+  line: string,
+  year: number
+): { date: Date; hour: number | null; minute: number } | null {
+  const m = line.match(
+    new RegExp(
+      String.raw`(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\b(?:\s*\((\d{1,2})h(\d{2})\))?`,
+      "i"
+    )
+  );
+  if (!m) return null;
+  const month = MONTHS[m[2].toLowerCase()];
+  if (month == null) return null;
+  const date = parseDateParts(Number(m[1]), month, year);
+  if (!date) return null;
+  let hour: number | null = null;
+  let minute = 0;
+  if (m[3] != null && m[4] != null) {
+    hour = Number(m[3]);
+    minute = Number(m[4]);
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+      hour = null;
+      minute = 0;
+    }
+  }
+  return { date, hour, minute };
+}
+
+function normalizeDashEntities(s: string): string {
+  return s.replace(/&#8211;/gi, "–").replace(/&#8212;/gi, "—");
+}
+
+/** Half-term break: CLOSE day → day before RETURN (RETURN = school resumes). */
+function halfTermBreakEvent(
+  summary: string,
+  description: string,
+  close: { date: Date; hour: number | null; minute: number },
+  returnDate: Date
+): ParsedEvent | null {
+  if (returnDate.getTime() <= close.date.getTime()) return null;
+  if (close.hour != null) {
+    const y = close.date.getFullYear();
+    const mo = close.date.getMonth();
+    const d = close.date.getDate();
+    const start = timedSpanInZone(
+      summary,
+      description,
+      y,
+      mo,
+      d,
+      close.hour,
+      close.minute,
+      close.hour,
+      close.minute,
+      "Africa/Johannesburg"
+    );
+    // Exclusive end = midnight at start of RETURN (Africa/Johannesburg = UTC+2).
+    const end = new Date(
+      Date.UTC(
+        returnDate.getFullYear(),
+        returnDate.getMonth(),
+        returnDate.getDate(),
+        -2,
+        0,
+        0
+      )
+    );
+    if (end.getTime() <= new Date(start.start).getTime()) return null;
+    return { ...start, end: end.toISOString() };
+  }
+  const last = new Date(
+    returnDate.getFullYear(),
+    returnDate.getMonth(),
+    returnDate.getDate() - 1
+  );
+  if (last.getTime() < close.date.getTime()) return null;
+  return allDaySpan(summary, description, close.date, last);
+}
+
+/** Named holiday / range lines under Public Holidays (same term year). */
+function parseTermPublicHolidayLine(
+  line: string,
+  year: number
+): ParsedEvent | null {
+  const raw = normalizeDashEntities(line);
+
+  // "Easter Weekend (29 March – 1 April)"
+  const namedRange = raw.match(
+    new RegExp(
+      String.raw`^(.+?)\s*\(\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*[–—−-]\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*\)\s*$`,
+      "i"
+    )
+  );
+  if (namedRange) {
+    const name = namedRange[1].replace(/\s+/g, " ").trim();
+    const m1 = MONTHS[namedRange[3].toLowerCase()];
+    const m2 = MONTHS[namedRange[5].toLowerCase()];
+    if (name.length >= 3 && m1 != null && m2 != null) {
+      const a = parseDateParts(Number(namedRange[2]), m1, year);
+      const b = parseDateParts(Number(namedRange[4]), m2, year);
+      if (a && b && b.getTime() >= a.getTime()) {
+        return allDaySpan(name, raw, a, b);
+      }
+    }
+  }
+
+  // "Friday, 3 April – Monday, 6 April (Easter)"
+  const rangeNamed = raw.match(
+    new RegExp(
+      String.raw`^(?:${WEEKDAY_ALT})?,?\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*[–—−-]\s*(?:${WEEKDAY_ALT})?,?\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*\(([^)]+)\)\s*$`,
+      "i"
+    )
+  );
+  if (rangeNamed) {
+    const m1 = MONTHS[rangeNamed[2].toLowerCase()];
+    const m2 = MONTHS[rangeNamed[4].toLowerCase()];
+    const name = rangeNamed[5].replace(/\s+/g, " ").trim();
+    if (name.length >= 3 && m1 != null && m2 != null) {
+      const a = parseDateParts(Number(rangeNamed[1]), m1, year);
+      const b = parseDateParts(Number(rangeNamed[3]), m2, year);
+      if (a && b && b.getTime() >= a.getTime()) {
+        return allDaySpan(name, raw, a, b);
+      }
+    }
+  }
+
+  // "Friday 22 March (School Holiday)" / "Saturday, 21 March (Human Rights Day)"
+  const dayNamed = raw.match(
+    new RegExp(
+      String.raw`^(?:${WEEKDAY_ALT})?,?\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*\(([^)]+)\)\s*$`,
+      "i"
+    )
+  );
+  if (dayNamed) {
+    const month = MONTHS[dayNamed[2].toLowerCase()];
+    const name = dayNamed[3].replace(/\s+/g, " ").trim();
+    // Reject clock crumbs mistaken as labels
+    if (/^\d{1,2}h\d{2}$/i.test(name)) return null;
+    if (month == null || name.length < 3) return null;
+    const d = parseDateParts(Number(dayNamed[1]), month, year);
+    if (!d) return null;
+    return allDayDay(name, raw, d);
+  }
+
+  return null;
+}
+
 export function parseTermStartCloseCalendar(
   text: string
 ): { title: string; events: ParsedEvent[] } {
   const lines = text
     .split(/\r?\n/)
-    .map((l) => l.replace(/\s+/g, " ").trim())
+    .map((l) => normalizeDashEntities(l.replace(/\s+/g, " ").trim()))
     .filter(Boolean);
   const events: ParsedEvent[] = [];
   let termN: number | null = null;
+  let termYear: number | null = null;
   let start: Date | null = null;
+  let inHalfTerm = false;
+  let halfClose: {
+    date: Date;
+    hour: number | null;
+    minute: number;
+    line: string;
+  } | null = null;
+  let inHolidays = false;
 
   for (const line of lines) {
     const tm = line.match(/^Term\s+([1234])\b/i);
     if (tm) {
       termN = Number(tm[1]);
       start = null;
+      termYear = null;
+      inHalfTerm = false;
+      halfClose = null;
+      inHolidays = false;
       continue;
     }
     if (termN == null) continue;
+
     if (/^START:/i.test(line)) {
       const d = ymdOnLine(line);
-      if (d) start = d;
+      if (d) {
+        start = d;
+        termYear = d.getFullYear();
+      }
       continue;
     }
+
+    if (/^Half\s+Term\b/i.test(line)) {
+      inHalfTerm = true;
+      halfClose = null;
+      inHolidays = false;
+      continue;
+    }
+
+    if (/^Public\s+Holidays\b/i.test(line)) {
+      inHalfTerm = false;
+      halfClose = null;
+      inHolidays = true;
+      continue;
+    }
+
+    if (inHalfTerm && termYear != null && /^CLOSE:/i.test(line)) {
+      // Half-term CLOSE is yearless on the page — inherit term year only.
+      if (ymdOnLine(line)) continue;
+      const md = mdOnLine(line, termYear);
+      if (md) halfClose = { ...md, line };
+      continue;
+    }
+
+    if (inHalfTerm && termYear != null && /^RETURN:/i.test(line) && halfClose) {
+      const md = mdOnLine(line, termYear);
+      if (md) {
+        const ev = halfTermBreakEvent(
+          "Half Term (Mid-Term Break)",
+          `${halfClose.line}; ${line}`,
+          halfClose,
+          md.date
+        );
+        if (ev) events.push(ev);
+      }
+      halfClose = null;
+      inHalfTerm = false;
+      continue;
+    }
+
     if (/^CLOSE:/i.test(line) && start) {
       const d = ymdOnLine(line);
-      // Yearless half-term CLOSE — keep waiting for the term CLOSE with a year.
+      // Yearless half-term CLOSE outside Half Term block — ignore; wait for term CLOSE.
       if (!d) continue;
       const y = start.getFullYear();
-      events.push(
-        allDaySpan(`Term ${termN} ${y}`, `${line}`, start, d)
-      );
+      termYear = y;
+      events.push(allDaySpan(`Term ${termN} ${y}`, `${line}`, start, d));
       start = null;
-      termN = null;
+      // Keep termN + termYear for following half-term / holiday lines.
+      continue;
+    }
+
+    if (inHolidays && termYear != null) {
+      const hol = parseTermPublicHolidayLine(line, termYear);
+      if (hol) events.push(hol);
     }
   }
 
@@ -1837,7 +2047,8 @@ export function parseTermStartCloseCalendar(
  *
  * Western Cape school-calendar HTML is a special case: terms become year-titled
  * SPANS (not yearless open/close dots); holidays keep the year in the name.
- * Independent START:/CLOSE: term pages (year-stamped) also become Term N spans.
+ * Independent START:/CLOSE: term pages (year-stamped) become Term N spans plus
+ * that page’s half-term CLOSE→RETURN and named Public Holiday lines.
  */
 export function parseSourceText(
   text: string,
