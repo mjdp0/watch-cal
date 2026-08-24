@@ -1524,6 +1524,101 @@ describe("parseSource", () => {
     );
   });
 
+  it("Nov NSC timetable + reg-form PDFs emit proven parent days (not subject dump / not Aug-2027 typo)", async () => {
+    const {
+      parseWesternCapeNovNscTimetablePdf,
+      parseWesternCapeNovNscRegFormPdf,
+      parseWesternCapeExamPage,
+      mergeWesternCapeExamEvents,
+    } = await import("./parseSource");
+
+    const timetable = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-nov-nsc-timetable-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const regForm = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-nov-nsc-reg-form-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const nscJune = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-nsc-exams-june-extract.txt"
+      ),
+      "utf8"
+    );
+
+    assert.match(timetable, /FINAL EXAMINATION TIMETABLE/i);
+    assert.match(timetable, /EXAMINATION DATE: OCTOBER\/NOVEMBER 2026/i);
+    assert.match(timetable, /2026-10-13/);
+    assert.match(timetable, /2026-11-26/);
+    assert.match(regForm, /CLOSING DATE: 21 AUGUST 2026/i);
+
+    const fromTt = parseWesternCapeNovNscTimetablePdf(timetable);
+    assert.equal(fromTt.length, 1, "one exam span — not per-sitting / per-subject dump");
+    assert.equal(fromTt[0].summary, "NSC October/November 2026 exam");
+    assert.match(fromTt[0].start, /^2026-10-13/);
+    assert.match(fromTt[0].end, /^2026-11-27/); // exclusive end after 26 Nov
+    assert.ok(
+      !fromTt.some((e) => e.start.startsWith("2026-05-08")),
+      "signature DATE 2026-05-08 is not a sitting day"
+    );
+
+    const fromReg = parseWesternCapeNovNscRegFormPdf(regForm);
+    assert.equal(fromReg.length, 1, "closing day once");
+    assert.equal(
+      fromReg[0].summary,
+      "Closing date for November 2026 NSC examination registration"
+    );
+    assert.match(fromReg[0].start, /^2026-08-21/);
+    assert.match(fromReg[0].end, /^2026-08-22/);
+
+    // June HTML typo must still not emit; form closing day is separate
+    const fromJuneHtml = parseWesternCapeExamPage(nscJune);
+    assert.ok(
+      !fromJuneHtml.some(
+        (e) =>
+          /Registration/i.test(e.summary) && e.start.startsWith("2027-08-07")
+      ),
+      "June-page 7–21 August 2027 typo still dropped"
+    );
+    assert.ok(
+      !fromJuneHtml.some((e) =>
+        /November 2026 NSC examination registration/i.test(e.summary)
+      ),
+      "Nov reg closing comes from form PDF, not June HTML"
+    );
+
+    const merged = mergeWesternCapeExamEvents([
+      fromJuneHtml,
+      fromTt,
+      fromReg,
+      fromTt,
+      fromReg,
+    ]);
+    assert.equal(
+      merged.filter((e) => e.summary === "NSC October/November 2026 exam")
+        .length,
+      1,
+      "timetable span deduped"
+    );
+    assert.equal(
+      merged.filter(
+        (e) =>
+          e.summary ===
+          "Closing date for November 2026 NSC examination registration"
+      ).length,
+      1,
+      "reg closing deduped"
+    );
+  });
+
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {
     // Recorded pdf-parse extract of
     // St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf — not a live fetch.

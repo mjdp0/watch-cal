@@ -1,0 +1,543 @@
+
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+Tuesday 
+Dinsdag 
+2026-10-13
+1
+09:00 - 12:00CATN.1Computer Applications Technology Paper 1 (Practical)Rekenaartoepassingstegnologie Vraestel 1 (Prakties)
+14:00 - 16:00GRMFA.1German First Additional Language Paper 1Duits Eerste Addisionele Taal Vraestel 1
+14:00 - 16:00GRMHL.1German Home Language Paper 1Duits Huistaal Vraestel 1
+14:00 - 16:00GRMSA.1German Second Additional Language Paper 1Duits Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00GUJFA.1Gujarati First Additional Language Paper 1Gujarati Eerste Addisionele Taal Vraestel 1
+14:00 - 16:00GUJHL.1Gujarati Home Language Paper 1Gujarati Huistaal Vraestel 1
+14:00 - 16:00GUJSA.1Gujarati Second Additional Language Paper 1Gujarati Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00HBRSA.1Hebrew Second Additional Language Paper 1Hebreeus Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00HNDFA.1Hindi First Additional Language Paper 1Hindi Eerste Addisionele Taal Vraestel 1
+14:00 - 16:00HNDHL.1Hindi Home Language Paper 1Hindi Huistaal Vraestel 1
+14:00 - 16:00HNDSA.1Hindi Second Additional Language Paper 1Hindi Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00TMLFA.1Tamil First Additional Language Paper 1Tamil Eerste Addisionele Taal Vraestel 1
+14:00 - 16:00TMLHL.1Tamil Home Language Paper 1Tamil Huistaal Vraestel 1
+14:00 - 16:00TMLSA.1Tamil Second Additional Language Paper 1Tamil Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00TLGFA.1Telegu First Additional Language Paper 1Telegu Eerste Addisionele Taal Vraestel 1
+14:00 - 16:00TLGHL.1Telegu Home Language Paper 1Telegu Huistaal Vraestel 1
+14:00 - 16:00TLGSA.1Telegu Second Additional Language Paper 1Telegu Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00URDFA.1Urdu First Additional Language Paper 1Urdu Eerste Addisionele Taal Vraestel 1
+14:00 - 16:00URDHL.1Urdu Home Language Paper 1Urdu Huistaal Vraestel 1
+14:00 - 16:00URDSA.1Urdu Second Additional Language Paper 1Urdu Tweede Addisionele Taal Vraestel 1
+2
+ANNEXURE A/BYLAE A
+WESTERN CAPE EDUCATION DEPARTMENT
+WES-KAAPSE ONDERWYSDEPARTEMENT
+FINAL EXAMINATION TIMETABLE, dated 09 March 2026/ FINALE EKSAMENROOSTER gedateer 09 Maart 2026
+NATIONAL SENIOR CERTIFICATE (NSC) EXAMINATION / NASIONALE SENIOR SERTIFIKAAT- (NSS-) EKSAMEN
+EXAMINATION DATE: OCTOBER/NOVEMBER 2026 / EKSAMENDATUM: OKTOBER/NOVEMBER 2026
+Tuesday 
+Dinsdag 
+2026-10-13
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+Wednesday
+Woensdag 
+2026-10-14
+3
+09:00 - 12:00INFT.1Information Technology Paper 1 (Practical)Inligtingstegnologie Vraestel 1 (Prakties)
+14:00 - 16:00ARBSA.1Arabic Second Additional Language Paper 1Arabies Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00FRHSA.1French Second Additional Language Paper 1Frans Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00ITLSA.1Italian Second Additional Language Paper 1Italiaans Tweede Addisionele Taal Vraestel 1
+14:00 - 17:00LTNSA.1Latin Second Additional Language Paper 1Latyn Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00MANSA.1Mandarin Second Additional Language Paper 1Mandaryns Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00MGRSA.1Modern Greek Second Additional Language Paper 1Moderne Grieks Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00PRGFA.1Portuguese First Additional Language Paper 1Portugees Eerste Addisionele Taal Vraestel 1
+14:00 - 16:00PRGHL.1Portuguese Home Language Paper 1Portugees Huistaal Vraestel 1
+14:00 - 16:00PRGSA.1Portuguese Second Additional Language Paper 1Portugees Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00SRBSA.1Serbian Second Additional Language Paper 1Serwies Tweede Addisionele Taal Vraestel 1
+14:00 - 16:00SPNSA.1Spanish Second Additional Language Paper 1Spaans Tweede Addisionele Taal Vraestel 1
+09:00 - 11:30ENGFA.3English First Additional Language Paper 3Engels Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00ENGHL.3English Home Language Paper 3Engels Huistaal Vraestel 3
+09:00 - 11:30ENGSA.3English Second Additional Language Paper 3Engels Tweede Addisionele Taal Vraestel 3
+14:00 - 16:00GRMFA.2German First Additional Language Paper 2Duits Eerste Addisionele Taal Vraestel 2
+14:00 - 16:30GRMHL.2German Home Language Paper 2Duits Huistaal Vraestel 2
+14:00 - 16:00GRMSA.2German Second Additional Language Paper 2Duits Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00GUJFA.2Gujarati First Additional Language Paper 2Gujarati Eerste Addisionele Taal Vraestel 2
+14:00 - 16:30GUJHL.2Gujarati Home Language Paper 2Gujarati Huistaal Vraestel 2
+14:00 - 16:00GUJSA.2Gujarati Second Additional Language Paper 2Gujarati Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00HBRSA.2Hebrew Second Additional Language Paper 2Hebreeus Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00HNDFA.2Hindi First Additional Language Paper 2Hindi Eerste Addisionele Taal Vraestel 2
+14:00 - 16:30HNDHL.2Hindi Home Language Paper 2Hindi Huistaal Vraestel 2
+14:00 - 16:00HNDSA.2Hindi Second Additional Language Paper 2Hindi Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00TMLFA.2Tamil First Additional Language Paper 2Tamil Eerste Addisionele Taal Vraestel 2
+14:00 - 16:30TMLHL.2Tamil Home Language Paper 2Tamil Huistaal Vraestel 2
+14:00 - 16:00TMLSA.2Tamil Second Additional Language Paper 2Tamil Tweede Addisionele Taal Vraestel 2
+Wednesday
+Woensdag 
+2026-10-14
+4
+Thursday 
+Donderdag 
+2026-10-15
+5
+6
+Thursday
+Donderdag
+2026-10-15
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+14:00 - 16:00TLGFA.2Telegu First Additional Language Paper 2Telegu Eerste Addisionele Taal Vraestel 2
+14:00 - 16:30TLGHL.2Telegu Home Language Paper 2Telegu Huistaal Vraestel 2
+14:00 - 16:00TLGSA.2Telegu Second Additional Language Paper 2Telegu Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00URDFA.2Urdu First Additional Language Paper 2Urdu Eerste Addisionele Taal Vraestel 2
+14:00 - 16:30URDHL.2Urdu Home Language Paper 2Urdu Huistaal Vraestel 2
+14:00 - 16:00URDSA.2Urdu Second Additional Language Paper 2Urdu Tweede Addisionele Taal Vraestel 2
+09:00 - 11:00ECON.1Economics Paper 1Ekonomie Vraestel 1
+09:00 - 12:00MCTA.1Mechanical Technology (Automotive)Meganiese Tegnologie (Motors)
+09:00 - 12:00MCTF.1Mechanical Technology (Fitting and Machining)Meganiese Tegnologie (Passing en Masjinering)
+09:00 - 12:00MCTW.1Mechanical Technology (Welding and Metal Work)Meganiese Tegnologie (Sweis en Metaalwerk)
+Friday
+Vrydag 
+2026-10-16
+8
+14:00 - 17:00DSGN.1Design Paper 1Ontwerp Vraestel 1
+09:00 - 11:30NDBFA.3isiNdebele First Additional Language Paper 3    isiNdebele Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00NDBHL.3isiNdebele Home Language Paper 3 isiNdebele Huistaal Vraestel 3
+09:00 - 11:30NDBSA.3isiNdebele Second Additional Language Paper 3isiNdebele Tweede Addisionele Taal Vraestel 3
+09:00 - 11:30XHOFA.3isiXhosa First Additional Language Paper 3    isiXhosa Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00XHOHL.3isiXhosa Home Language Paper 3isiXhosa Huistaal Vraestel 3
+09:00 - 11:30XHOSA.3isiXhosa Second Additional Language Paper 3isiXhosa Tweede Addisionele Taal Vraestel 3
+09:00 - 11:30ZULFA.3isiZulu First Additional Language Paper 3     isiZulu Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00ZULHL.3isiZulu Home Language Paper 3 isiZulu Huistaal Vraestel 3
+09:00 - 11:30ZULSA.3isiZulu Second Additional Language Paper 3isiZulu Tweede Addisionele Taal Vraestel 3
+09:00 - 11:30SWAFA.3siSwati First Additional Language Paper 3   siSwati Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00SWAHL.3siSwati Home Language Paper 3 siSwati Huistaal Vraestel 3
+09:00 - 11:30SWASA.3siSwati Second Additional Language Paper 3siSwati Tweede Addisionele Taal Vraestel 3
+Monday
+Maandag
+2026-10-19
+10
+14:00 - 16:30AGRS.1Agricultural Sciences Paper 1Landbouwetenskappe Vraestel 1
+09:00 - 11:30AFRFA.3Afrikaans First Additional Language Paper 3Afrikaans Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00AFRHL.3Afrikaans Home Language Paper 3Afrikaans Huistaal Vraestel 3
+09:00 - 11:30AFRSA.3Afrikaans Second Additional Language Paper 3Afrikaans Tweede Addisionele Taal Vraestel 3
+Monday 
+Maandag 
+2026-10-19
+Tuesday 
+Dinsdag
+2026-10-20
+11
+9
+Friday
+Vrydag 
+2026-10-16
+7
+6
+Thursday
+Donderdag
+2026-10-15
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+14:00 - 17:00HIST.1History Paper 1Geskiedenis Vraestel 1
+14:00 - 17:00MRTE.1 Maritime Economics Maritieme Ekonomie
+09:00 - 11:30SEPFA.3Sepedi First Additional Language Paper 3    Sepedi Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00SEPHL.3Sepedi Home Language Paper 3  Sepedi Huistaal Vraestel 3
+09:00 - 11:30SEPSA.3Sepedi Second Additional Language Paper 3Sepedi Tweede Addisionele Taal Vraestel 3
+09:00 - 11:30SESFA.3Sesotho First Additional Language Paper 3    Sesotho Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00SESHL.3Sesotho Home Language Paper 3Sesotho Huistaal Vraestel 3
+09:00 - 11:30SESSA.3Sesotho Second Additional Language Paper 3Sesotho Tweede Addisionele Taal Vraestel 3
+09:00 - 11:30SETFA.3Setswana First Additional Language Paper 3   Setswana Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00SETHL.3Setswana Home Language Paper 3  Setswana Huistaal Vraestel 3
+09:00 - 11:30SETSA.3Setswana Second Additional Language Paper 3Setswana Tweede Addisionele Taal Vraestel 3
+09:00 - 12:00SASHL.3South African Sign Language Home Language Paper 3Suid-Afrikaanse Gebaretaal Huistaal Vraestel 3
+09:00 - 11:30TSVFA.3Tshivenda First Additional Language Paper 3  Tshivenda Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00TSVHL.3Tshivenda Home Language Paper 3  Tshivenda Huistaal Vraestel 3
+09:00 - 11:30TSVSA.3Tshivenda Second Additional Language Paper 3Tshivenda Tweede Addisionele Taal Vraestel 3
+09:00 - 11:30XITFA.3Xitsonga First Additional Language Paper 3Xitsonga Eerste Addisionele Taal Vraestel 3
+09:00 - 12:00XITHL.3Xitsonga Home Language Paper 3 Xitsonga Huistaal Vraestel 3
+09:00 - 11:30XITSA.3Xitsonga Second Additional Language Paper 3Xitsonga Tweede Addisionele Taal Vraestel 3
+Wednesday
+Woensdag
+2026-10-21
+14
+14:00 - 17:00INFT.2Information Technology Paper 2 (Theory)Inligtingstegnologie Vraestel 2 (Teorie)
+Thursday
+Donderdag
+2026-10-22
+15
+09:00 - 11:00ACCN.1Accounting Paper 1Rekeningkunde Vraestel 1
+14:00 - 17:00GRDS.1Engineering Graphics and Design Paper 1Ingenieursgrafika en -Ontwerp Vraestel 1
+14:00 - 16:30MRSC.1Marine Sciences Paper 1Mariene Wetenskappe Vraestel 1
+09:00 - 12:00MLIT.1Mathematical Literacy Paper 1Wiskundige Geletterdheid Vraestel 1
+09:00 - 12:00MATH.1Mathematics Paper 1Wiskunde Vraestel 1
+09:00 - 12:00TMAT.1Technical Mathematics Paper 1Tegniese Wiskunde Vraestel 1
+13
+Wednesday
+Woensdag
+2026-10-21
+Thursday
+Donderdag
+2026-10-22
+16
+Friday
+Vrydag 
+2026-10-23
+17
+Tuesday 
+Dinsdag
+2026-10-20
+12
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+14:00 - 16:30GRMFA.3German First Additional Language Paper 3Duits  Eerste Addisionele Taal Vraestel 3
+14:00 - 16:30GRMHL.3German Home Language Paper 3Duits Huistaal Vraestel 3
+14:00 - 16:30GUJFA.3Gujarati First Additional Language Paper 3Gujarati Eerste Addisionele Taal Vraestel 3
+14:00 - 16:30GUJHL.3Gujarati Home Language Paper 3Gujarati Huistaal Vraestel 3
+14:00 - 16:30HNDFA.3Hindi First Additional Language Paper 3Hindi Eerste Addisionele Taal Vraestel 3
+14:00 - 16:30HNDHL.3Hindi Home Language Paper 3Hindi Huistaal Vraestel 3
+14:00 - 16:30PRGFA.3Portuguese First Additional Language Paper 3Portugees Eerste Addisionele Taal Vraestel 3
+14:00 - 16:30PRGHL.3Portuguese Home Language Paper 3Portugees Huistaal Vraestel 3
+14:00 - 16:30TMLFA.3Tamil First Additional Language Paper 3Tamil Eerste Addisionele Taal Vraestel 3
+14:00 - 16:30TMLHL.3Tamil Home Language Paper 3Tamil Huistaal Vraestel 3
+14:00 - 16:30TLGFA.3Telegu First Additional Language Paper 3Telegu Eerste Addisionele Taal Vraestel 3
+14:00 - 16:30TLGHL.3Telegu Home Language Paper 3Telegu Huistaal Vraestel 3
+14:00 - 16:30URDFA.3Urdu First Additional Language Paper 3Urdu Eerste Addisionele Taal Vraestel 3
+14:00 - 16:30URDHL.3Urdu Home Language Paper 3Urdu Huistaal Vraestel 3
+09:00 - 12:00MLIT.2Mathematical Literacy Paper 2Wiskundige Geletterdheid Vraestel 2
+09:00 - 12:00MATH.2Mathematics Paper 2Wiskunde Vraestel 2
+09:00 - 12:00TMAT.2Technical Mathematics Paper 2Tegniese Wiskunde Vraestel 2
+Monday 
+Maandag 
+2026-10-26
+20
+14:00 - 17:00SPES.1Sport and Exercise Science Paper 1Sport en Oefenkunde Vraestel 1
+09:00 - 11:00SEPFA.1Sepedi First Additional Language Paper 1    Sepedi Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00SEPHL.1Sepedi Home Language Paper 1  Sepedi Huistaal Vraestel 1
+09:00 - 11:00SEPSA.1Sepedi Second Additional Language Paper 1 Sepedi Tweede Addisionele Taal Vraestel 1
+09:00 - 11:00SESFA.1Sesotho First Additional Language Paper 1    Sesotho Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00SESHL.1Sesotho Home Language Paper 1Sesotho Huistaal Vraestel 1
+09:00 - 11:00SESSA.1Sesotho Second Additional Language Paper 1  Sesotho Tweede Addisionele Taal Vraestel 1
+09:00 - 11:00SETFA.1Setswana First Additional Language Paper 1   Setswana Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00SETHL.1Setswana Home Language Paper 1  Setswana Huistaal Vraestel 1
+09:00 - 11:00SETSA.1Setswana Second Additional Language Paper 1    Setswana Tweede Addisionele Taal Vraestel 1
+09:00 - 11:00SASHL.1South African Sign Language Home Language Paper 1Suid-Afrikaanse Gebaretaal Huistaal Vraestel 1
+18
+Tuesday
+Dinsdag
+2026-10-27
+Friday
+Vrydag 
+2026-10-23
+Monday 
+Maandag 
+2026-10-26
+19
+21
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+09:00 - 11:00TSVFA.1Tshivenda First Additional Language Paper 1  Tshivenda Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00TSVHL.1Tshivenda Home Language Paper 1  Tshivenda Huistaal Vraestel 1
+09:00 - 11:00TSVSA.1Tshivenda Second Additional Language Paper 1  Tshivenda Tweede Addisionele Taal Vraestel 1
+09:00 - 11:00XITFA.1Xitsonga First Additional Language Paper 1Xitsonga Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00XITHL.1Xitsonga Home Language Paper 1 Xitsonga Huistaal Vraestel 1
+09:00 - 11:00XITSA.1Xitsonga Second Additional Language Paper 1    Xitsonga Tweede Addisionele Taal Vraestel 1
+Tuesday
+Dinsdag
+2026-10-27
+22
+14:00 - 17:00GRDS.2Engineering Graphics and Design Paper 2Ingenieursgrafika en -Ontwerp Vraestel 2
+09:00 - 11:00ENGFA.1English First Additional Language Paper 1Engels Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00ENGHL.1English Home Language Paper 1Engels Huistaal Vraestel 1
+09:00 - 11:00ENGSA.1English Second Additional Language Paper 1Engels Tweede Addisionele Taal Vraestel 1
+Wednesday
+Woensdag
+2026-10-28
+24
+14:00 - 16:00ACCN.2Accounting Paper 2Rekeningkunde Vraestel 2
+Thursday
+Donderdag
+2026-10-29
+25
+09:00 - 12:00GEOG.1
+Geography Paper 1 (Climate and Weather, 
+Geomorphology and Map work)
+Geografie Vraestel 1 (Klimaat en Weer, Geomorfologie en 
+Kaartwerk)
+Thursday
+Donderdag
+2026-10-29
+26
+14:00 - 17:00CATN.2Computer Applications Technology Paper 2 (Theory)Rekenaartoepassingstegnologie Vraestel 2 (Teorie)
+09:00 - 12:00PHSC.1Physical Sciences Paper 1 (Physics)Fisiese Wetenskappe Vraestel 1 (Fisika)
+09:00 - 12:00TSCE.1Technical Sciences Paper 1Tegniese Wetenskappe Vraestel 1
+Friday 
+Vrydag 
+2026-10-30
+28
+14:00 - 17:00TRSM.1TourismToerisme
+09:00 - 12:00PHSC.2Physical Sciences Paper 2 (Chemistry)Fisiese Wetenskappe Vraestel 2 (Chemie)
+09:00 - 10:30TSCE.2Technical Sciences Paper 2Tegniese Wetenskappe Vraestel 2
+Tuesday
+Dinsdag
+2026-10-27
+21
+Wednesday
+Woensdag
+2026-10-28
+23
+Friday 
+Vrydag 
+2026-10-30
+27
+Monday 
+Maandag 
+2026-11-02
+29
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+Monday 
+Maandag 
+2026-11-02
+30
+14:00 - 16:00RLGS.1Religion Studies Paper 1Religiestudies Vraestel 1
+Tuesday
+Dinsdag 
+2026-11-03
+Wednesday
+Woensdag 
+2026-11-04
+Thurday
+Donderdag 
+2026-11-05
+09:00 - 11:00NDBFA.1isiNdebele First Additional Language Paper 1    isiNdebele Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00NDBHL.1isiNdebele Home Language Paper 1 isiNdebele Huistaal Vraestel 1
+09:00 - 11:00NDBSA.1isiNdebele Second Additional Language Paper 1  isiNdebele Tweede Addisionele Taal Vraestel 1
+09:00 - 11:00XHOFA.1isiXhosa First Additional Language Paper 1    isiXhosa Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00XHOHL.1isiXhosa Home Language Paper 1isiXhosa Huistaal Vraestel 1
+09:00 - 11:00XHOSA.1isiXhosa Second Additional Language Paper 1  isiXhosa Tweede Addisionele Taal Vraestel 1
+09:00 - 11:00ZULFA.1isiZulu First Additional Language Paper 1     isiZulu Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00ZULHL.1isiZulu Home Language Paper 1 isiZulu Huistaal Vraestel 1
+09:00 - 11:00ZULSA.1isiZulu Second Additional Language Paper 1     isiZulu Tweede Addisionele Taal Vraestel 1
+09:00 - 11:00SWAFA.1siSwati First Additional Language Paper 1   siSwati Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00SWAHL.1siSwati Home Language Paper 1 siSwati Huistaal Vraestel 1
+09:00 - 11:00SWASA.1siSwati Second Additional Language Paper 1     siSwati Tweede Addisionele Taal Vraestel 1
+14:00 - 17:00CNST.1Consumer StudiesVerbruikerstudies
+14:00 - 17:00HOSP.1Hospitality StudiesGasvryheidstudies
+Monday 
+Maandag 
+2026-11-09
+Friday 
+Vrydag 
+2026-11-06
+31
+Friday 
+Vrydag 
+2026-11-06
+32
+NON-EXAMINATION DAY
+NON-EXAMINATION DAY
+NON-EXAMINATION DAY
+NON-EXAMINATION DAY
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+09:00 - 11:30NDBFA.2isiNdebele First Additional Language Paper 2    isiNdebele Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30NDBHL.2isiNdebele Home Language Paper 2 isiNdebele Huistaal Vraestel 2
+09:00 - 10:30NDBSA.2isiNdebele Second Additional Language Paper 2  isiNdebele Tweede Addisionele Taal Vraestel 2
+09:00 - 11:30XHOFA.2isiXhosa First Additional Language Paper 2    isiXhosa Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30XHOHL.2isiXhosa Home Language Paper 2isiXhosa Huistaal Vraestel 2
+09:00 - 10:30XHOSA.2isiXhosa Second Additional Language Paper 2  isiXhosa Tweede Addisionele Taal Vraestel 2
+09:00 - 11:30ZULFA.2isiZulu First Additional Language Paper 2     isiZulu Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30ZULHL.2isiZulu Home Language Paper 2 isiZulu Huistaal Vraestel 2
+09:00 - 10:30ZULSA.2isiZulu Second Additional Language Paper 2     isiZulu Tweede Addisionele Taal Vraestel 2
+09:00 - 11:30SWAFA.2siSwati First Additional Language Paper 2   siSwati Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30SWAHL.2siSwati Home Language Paper 2 siSwati Huistaal Vraestel 2
+09:00 - 10:30SWASA.2siSwati Second Additional Language Paper 2     siSwati Tweede Addisionele Taal Vraestel 2
+14:00 - 17:00ELTD.1Electrical Technology (Digital)Elektriese Tegnologie (Digitaal)
+14:00 - 17:00ELTE.1Electrical Technology (Electronics)Elektriese Tegnologie (Elektronika)
+14:00 - 17:00ELTP.1Electrical Technology (Power Systems)Elektriese Tegnologie (Kragstelsels)
+14:00 - 17:00NTSC.1Nautical Science Paper 1Seevaartkunde Vraestel 1
+09:00 - 11:00AFRFA.1Afrikaans First Additional Language Paper 1Afrikaans Eerste Addisionele Taal Vraestel 1
+09:00 - 11:00AFRHL.1Afrikaans Home Language Paper 1Afrikaans Huistaal Vraestel 1
+09:00 - 11:00AFRSA.1Afrikaans Second Additional Language Paper 1Afrikaans Tweede Addisionele Taal Vraestel 1
+Wednesday 
+Woensdag 
+2026-11-11
+36
+14:00 - 16:00BSTD.1Business Studies Paper 1Besigheidstudies Vraestel 1
+Thurday
+Donderdag 
+2026-11-12
+37
+09:00 - 12:00GEOG.2
+Geography Paper 2 (Rural and Urban Settlements, 
+Economic Geography of SA and Map work)
+Geografie Vraestel 2 (Landelike en Stedelike 
+Nedersettings, Ekonomiese Geografie van SA en 
+Kaartwerk)
+Thurday
+Donderdag 
+2026-11-12
+38
+14:00 - 16:00RLGS.2Religion Studies Paper 2Religiestudies Vraestel 2
+Friday 
+Vrydag 
+2026-11-13
+39
+09:00 - 11:30LFSC.1Life Sciences Paper 1Lewenswetenskappe Vraestel 1
+Tuesday
+Dinsdag
+2026-11-10
+33
+Tuesday
+Dinsdag
+2026-11-10
+34
+Wednesday 
+Woensdag 
+2026-11-11
+35
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+14:00 - 16:00ARBSA.2Arabic Second Additional Language Paper 2Arabies Tweede Addisionele Taal Vraestel 2
+14:00 - 17:00EQNS.1Equine StudiesPerdestudies
+14:00 - 16:00FRHSA.2French Second Additional Language Paper 2Frans Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00ITLSA.2Italian Second Additional Language Paper 2Italiaans Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00LTNSA.2Latin Second Additional Language Paper 2Latyn Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00MANSA.2Mandarin Second Additional Language Paper 2Mandaryns Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00MGRSA.2Modern Greek Second Additional Language Paper 2Moderne Grieks Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00PRGFA.2Portuguese First Additional Language Paper 2Portugees Eerste Addisionele Taal Vraestel 2
+14:00 - 16:30PRGHL.2Portuguese Home Language Paper 2Portugees Huistaal Vraestel 2
+14:00 - 16:00PRGSA.2Portuguese Second Additional Language Paper 2Portugees Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00SRBSA.2Serbian Second Additional Language Paper 2Serwies Tweede Addisionele Taal Vraestel 2
+14:00 - 16:00SPNSA.2Spanish Second Additional Language Paper 2Spaans Tweede Addisionele Taal Vraestel 2
+Monday
+Maandag
+2026-11-16
+41
+09:00 - 11:30LFSC.1Life Sciences Paper 2Lewenswetenskappe Vraestel 2
+14:00 - 17:00CVTV.1Civil Technology (Civil Services)Siviele Tegnologie (Siviele dienste)
+14:00 - 17:00CVTC.1Civil Technology (Construction)Siviele Tegnologie (Konstruksie)
+14:00 - 17:00CVTW.1Civil Technology (Woodworking)Siviele Tegnologie (Houtwerk)
+14:00 - 17:00DRMA.1Dramatic ArtsDramatiese Kunste
+09:00 - 11:30SEPFA.2Sepedi First Additional Language Paper 2    Sepedi Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30SEPHL.2Sepedi Home Language Paper 2  Sepedi Huistaal Vraestel 2
+09:00 - 10:30SEPSA.2Sepedi Second Additional Language Paper 2 Sepedi Tweede Addisionele Taal Vraestel 2
+09:00 - 11:30SESFA.2Sesotho First Additional Language Paper 2    Sesotho Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30SESHL.2Sesotho Home Language Paper 2Sesotho Huistaal Vraestel 2
+09:00 - 10:30SESSA.2Sesotho Second Additional Language Paper 2  Sesotho Tweede Addisionele Taal Vraestel 2
+09:00 - 11:30SETFA.2Setswana First Additional Language Paper 2   Setswana Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30SETHL.2Setswana Home Language Paper 2  Setswana Huistaal Vraestel 2
+09:00 - 10:30SETSA.2Setswana Second Additional Language Paper 2    Setswana Tweede Addisionele Taal Vraestel 2
+09:00 - 11:30SASHL.2South African Sign Language Home Language Paper 2Suid-Afrikaanse Gebaretaal Huistaal Vraestel 2
+Tuesday
+Dinsdag
+2026-11-17
+43
+Friday 
+Vrydag 
+2026-11-13
+40
+Monday
+Maandag
+2026-11-16
+42
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+09:00 - 11:30TSVFA.2Tshivenda First Additional Language Paper 2  Tshivenda Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30TSVHL.2Tshivenda Home Language Paper 2  Tshivenda Huistaal Vraestel 2
+09:00 - 10:30TSVSA.2Tshivenda Second Additional Language Paper 2  Tshivenda Tweede Addisionele Taal Vraestel 2
+09:00 - 11:30XITFA.2Xitsonga First Additional Language Paper 2Xitsonga Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30XITHL.2Xitsonga Home Language Paper 2 Xitsonga Huistaal Vraestel 2
+09:00 - 10:30XITSA.2Xitsonga Second Additional Language Paper 2    Xitsonga Tweede Addisionele Taal Vraestel 2
+14:00 - 16:30AGRS.2Agricultural Sciences Paper 2Landbouwetenskappe Vraestel 2
+14:00 - 17:00NTSC.2Nautical Science Paper 2Seevaartkunde Vraestel 2
+Wednesday 
+Woensdag 
+2026-11-18
+45
+09:00 - 11:00BSTD.2Business Studies Paper 2Besigheidstudies Vraestel 2
+Wednesday 
+Woensdag 
+2026-11-18
+46
+14:00 - 17:00VSLA.1Visual Arts Paper 1Visuele Kunste Vraestel 1
+09:00 - 11:30ENGFA.2English First Additional Language Paper 2Engels Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30ENGHL.2English Home Language Paper 2Engels Huistaal Vraestel 2
+09:00 - 10:30ENGSA.2English Second Additional Language Paper 2Engels Tweede Addisionele Taal Vraestel 2
+Thursday
+Donderdag 
+2026-11-19
+48
+14:00 - 17:00HIST.2History Paper 2Geskiedenis Vraestel 2
+09:00 - 11:30AFRFA.2Afrikaans First Additional Language Paper 2Afrikaans Eerste Addisionele Taal Vraestel 2
+09:00 - 11:30AFRHL.2Afrikaans Home Language Paper 2Afrikaans Huistaal Vraestel 2
+09:00 - 10:30AFRSA.2Afrikaans Second Additional Language Paper 2Afrikaans Tweede Addisionele Taal Vraestel 2
+Friday
+Vrydag
+2026-11-20
+50
+14:00 - 16:00ECON.2Economics Paper 2Ekonomie Vraestel 2
+Monday
+Maandag
+2026-11-23
+51
+09:00 - 12:00AGRT.1Agricultural TechnologyLandboutegnologie
+43
+Tuesday
+Dinsdag
+2026-11-17
+Tuesday
+Dinsdag
+2026-11-17
+44
+Thursday
+Donderdag 
+2026-11-19
+47
+Friday
+Vrydag
+2026-11-20
+49
+
+DATE/SESSION/TIME/CODE/SUBJECTVAKBESKRYWING
+DATUMSESSIETYDKODEDESCRIPTION
+Monday
+Maandag
+2026-11-23
+52
+14:00 - 17:00MUSC.1Music Paper 1 (Theory)Musiek Vraestel 1 (Teorie)
+09:00 - 12:00AGRM.1Agricultural Management PracticesLandboubestuurspraktyke
+09:00 - 11:30MRSC.2Marine Sciences Paper 2Mariene Wetenskappe Vraestel 2
+Tuesday
+Dinsdag
+2026-11-24
+54
+14:00 - 17:00DNCE.1Dance StudiesDansstudies
+Wednesday
+Woensdag
+2026-11-25
+55
+09:00 - 10:30MUSC.2Music Paper 2 (Comprehension)Musiek Vraestel 2 (Begrip)
+Thursday 
+Donderdag 
+2026-11-26
+56
+09:00 - 12:00
+CATN.1
+INFT. 1
+CATN.1 and INFT.1 rewrite PracticalCATN.1 en INFT.1 herskryf Prakties
+DATE / DATUM / UMHLA: 2026-05-08
+SIGNED / GETEKEN / ISAYINWE: B WALTERS 
+HEAD:  EDUCATION / HOOF: ONDERWYS / INTLOKO: YESEBE LEMFUNDO
+Tuesday
+Dinsdag
+2026-11-24
+53

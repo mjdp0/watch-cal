@@ -681,6 +681,20 @@ export const WESTERN_CAPE_EXAM_PAGE_URLS = [
   "https://www.westerncape.gov.za/education/matric-awards",
 ] as const;
 
+/**
+ * Final Oct/Nov 2026 NSC examination timetable (Annexure A) linked from the
+ * exam-nav “November exam timetable” control on /exams and related pages.
+ */
+export const WESTERN_CAPE_NOV_NSC_TIMETABLE_PDF_URL =
+  "https://www.westerncape.gov.za/education/files/wcg-blob-files?file=2026-05/Annexure%20A_1.pdf&type=file";
+
+/**
+ * November 2026 NSC registration form linked from the June NSC page.
+ * Form body proves the closing day only — not the June-page “7–21 August 2027” typo.
+ */
+export const WESTERN_CAPE_NOV_NSC_REG_FORM_PDF_URL =
+  "https://www.westerncape.gov.za/education/files/wcg-blob-files?file=2026-08/nsc-november-2026-registration-form_7-21-august-2026.pdf&type=file";
+
 export function isWesternCapeSchoolCalendarUrl(url: string): boolean {
   try {
     const u = new URL(url);
@@ -1506,6 +1520,81 @@ export function mergeWesternCapeExamEvents(
 /** Parse several exam-nav extracts and emit each parent fact once. */
 export function parseWesternCapeExamPages(texts: string[]): ParsedEvent[] {
   return mergeWesternCapeExamEvents(texts.map(parseWesternCapeExamPage));
+}
+
+/**
+ * Oct/Nov 2026 NSC final timetable PDF: one parent span from first→last
+ * sitting ISO day (not per-subject dump; not the signature DATE line).
+ */
+export function parseWesternCapeNovNscTimetablePdf(
+  text: string
+): ParsedEvent[] {
+  const cleaned = text.replace(/\u00a0/g, " ");
+  if (
+    !/FINAL\s+EXAMINATION\s+TIMETABLE/i.test(cleaned) ||
+    !/NATIONAL\s+SENIOR\s+CERTIFICATE\s+\(NSC\)\s+EXAMINATION/i.test(cleaned) ||
+    !/EXAMINATION\s+DATE:\s*OCTOBER\/NOVEMBER\s+2026/i.test(cleaned)
+  ) {
+    return [];
+  }
+  const days: Date[] = [];
+  const re = /\b(2026)-(10|11)-(\d{2})\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(cleaned)) !== null) {
+    const y = Number(m[1]);
+    const month = Number(m[2]) - 1;
+    const d = Number(m[3]);
+    const date = parseDateParts(d, month, y);
+    if (date) days.push(date);
+  }
+  if (!days.length) return [];
+  days.sort((a, b) => a.getTime() - b.getTime());
+  const first = days[0];
+  const last = days[days.length - 1];
+  return [
+    allDaySpan(
+      "NSC October/November 2026 exam",
+      "NSC October/November 2026 exam",
+      first,
+      last
+    ),
+  ];
+}
+
+/**
+ * November 2026 NSC registration form PDF: closing day only (form wording).
+ * Does not invent a 7 August open from the filename or the June HTML typo.
+ */
+export function parseWesternCapeNovNscRegFormPdf(text: string): ParsedEvent[] {
+  const cleaned = text.replace(/\u00a0/g, " ");
+  const flat = cleaned.replace(/\s+/g, " ").trim();
+  if (
+    !/NATIONAL\s+SENIOR\s+CERTIFICATE\s+\(NSC\)\s+NOVEMBER\s+REGISTRATION\s+FORM/i.test(
+      flat
+    )
+  ) {
+    return [];
+  }
+  const close = flat.match(
+    new RegExp(
+      String.raw`CLOSING\s+DATE:\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "i"
+    )
+  );
+  if (!close) return [];
+  const month = MONTHS[close[2].toLowerCase()];
+  if (month == null) return [];
+  const d = parseDateParts(Number(close[1]), month, Number(close[3]));
+  if (!d) return [];
+  // Refuse the known June-page typo year if it ever appears on a form extract
+  if (d.getFullYear() === 2027 && d.getMonth() === 7) return [];
+  return [
+    allDayDay(
+      "Closing date for November 2026 NSC examination registration",
+      "Closing date for November 2026 NSC examination registration",
+      d
+    ),
+  ];
 }
 
 /**
