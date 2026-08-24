@@ -86,7 +86,7 @@ describe("homepage examples and copy", () => {
       /Do not hydrate the free watch|looks like a failed parse/
     );
     // 402 error must use parent pay-once words, not engineer jargon
-    assert.match(page, /First calendar free\. Another school is \$5 once/);
+    assert.match(page, /First calendar free\. Another school is \$1 once/);
     assert.match(
       page,
       /if \(res\.status === 402 \|\| res\.status === 403\) \{\s*setNeedsExtraWatch\(true\);\s*setError\(/
@@ -98,10 +98,10 @@ describe("homepage examples and copy", () => {
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
-    // Extra / $5 label wiring — Ridgewood + Central Region GUIDELINE; Stithians omitted
+    // Extra / $1 label wiring — Ridgewood + Central Region GUIDELINE; Stithians omitted
     assert.match(
       page,
-      /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
+      /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$1<\/span>/
     );
     assert.match(page, /Ridgewood College terms \+ holidays 2026/);
     assert.match(page, /ridgewoodcollege\.co\.za\/term-dates\//);
@@ -166,7 +166,7 @@ describe("homepage examples and copy", () => {
     assert.doesNotMatch(page, /type=["']file["']/);
   });
 
-  it("Add to phone keeps webcal/https hrefs; footer is parent $5 once (not Polar SaaS)", async () => {
+  it("Add to phone keeps webcal/https hrefs; footer is parent $1 once (not Polar SaaS)", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
@@ -175,7 +175,7 @@ describe("homepage examples and copy", () => {
     assert.match(page, /href=\{feedLinks\.webcal_url\}/);
     assert.match(page, /href=\{feedLinks\.https_url\}/);
     assert.doesNotMatch(page, /Already live:/);
-    assert.match(page, /First calendar free\. Another school is \$5 once\./);
+    assert.match(page, /First calendar free\. Another school is \$1 once\./);
     assert.doesNotMatch(page, /billed SaaS|pay-once Polar/i);
     assert.doesNotMatch(page, /Dry-run preview|quota untouched|this instance/i);
     assert.doesNotMatch(page, /· id \{watch\.id\}/);
@@ -190,10 +190,10 @@ describe("homepage examples and copy", () => {
     assert.match(page, /setNeedsExtraWatch\(true\)/);
     assert.match(
       page,
-      /preview-checkout|preview && \([\s\S]*Pay \$5 once for another school/
+      /preview-checkout|preview && \([\s\S]*Pay \$1 once for another school/
     );
     assert.match(page, /First calendar free/);
-    assert.match(page, /\$5 once/);
+    assert.match(page, /\$1 once/);
     assert.match(page, /startExtraWatchCheckout/);
     assert.match(page, /\/api\/polar\/checkout/);
     // Preview path must not mint a watch

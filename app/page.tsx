@@ -225,7 +225,7 @@ export default function HomePage() {
           setNeedsExtraWatch(true);
           setError(
             data.message ||
-              "First calendar free. Another school is $5 once."
+              "First calendar free. Another school is $1 once."
           );
           if (data.payload?.checkout_message) {
             setCheckoutHint(data.payload.checkout_message);
@@ -408,7 +408,7 @@ export default function HomePage() {
                 >
                   {example.label}
                   {!example.feedId && (
-                    <span className="example-extra"> Extra / $5</span>
+                    <span className="example-extra"> Extra / $1</span>
                   )}
                 </button>
                 {feedLinks && (
@@ -441,7 +441,7 @@ export default function HomePage() {
           {preview && (
             <div className="pay-once preview-checkout">
               <p>
-                First calendar free. Another school is $5 once — then tap Create
+                First calendar free. Another school is $1 once — then tap Create
                 watch to subscribe.
               </p>
               <button
@@ -451,7 +451,7 @@ export default function HomePage() {
               >
                 {checkoutBusy
                   ? "Opening checkout…"
-                  : "Pay $5 once for another school"}
+                  : "Pay $1 once for another school"}
               </button>
               {checkoutHint && <p className="error">{checkoutHint}</p>}
             </div>
@@ -461,13 +461,13 @@ export default function HomePage() {
 
       {needsExtraWatch && !preview && (
         <div className="pay-once">
-          <p>First calendar free. Another school is $5 once.</p>
+          <p>First calendar free. Another school is $1 once.</p>
           <button
             type="button"
             onClick={startExtraWatchCheckout}
             disabled={checkoutBusy}
           >
-            {checkoutBusy ? "Opening checkout…" : "Pay $5 once for another school"}
+            {checkoutBusy ? "Opening checkout…" : "Pay $1 once for another school"}
           </button>
           {checkoutHint && <p className="error">{checkoutHint}</p>}
         </div>
@@ -524,7 +524,7 @@ export default function HomePage() {
       )}
 
       <p className="note">
-        First calendar free. Another school is $5 once.
+        First calendar free. Another school is $1 once.
       </p>
     </main>
   );
