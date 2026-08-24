@@ -98,7 +98,7 @@ describe("homepage examples and copy", () => {
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
-    // Extra / $5 label wiring — Ridgewood ships; Stithians stays omitted
+    // Extra / $5 label wiring — Ridgewood + Central Region GUIDELINE; Stithians omitted
     assert.match(
       page,
       /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
@@ -106,6 +106,19 @@ describe("homepage examples and copy", () => {
     assert.match(page, /Ridgewood College terms \+ holidays 2026/);
     assert.match(page, /ridgewoodcollege\.co\.za\/term-dates\//);
     assert.doesNotMatch(page, /Ridgewood College terms 2026(?!\s*\+)/);
+    assert.match(
+      page,
+      /ISASA\/SAHISA Central Region 2026 GUIDELINE \(4-term \+ 3-term\)/
+    );
+    assert.match(
+      page,
+      /brescia\.co\.za\/uploads\/files\/Calendars\/ISASA\.and\.SAHISA\.Central\.Region\.Calendar\.2026\.pdf/
+    );
+    // Official download HTML has no dates — must not be the Extra feed URL
+    assert.doesNotMatch(
+      page,
+      /isasa\.org\/download\/central-region-calendar-2026/
+    );
     // Stithians PDF is not the calendar a parent would read yet — tile omitted
     assert.doesNotMatch(page, /School calendar \(St /);
     assert.doesNotMatch(
@@ -1782,6 +1795,148 @@ describe("parseSource", () => {
     );
     assert.match(ics, /SUMMARY:Human Rights Day/);
     assert.match(ics, /DTSTART;VALUE=DATE:20260321/);
+  });
+
+  it("ISASA/SAHISA Central Region 2026 GUIDELINE PDF: 4-term + 3-term spans and in-term holidays", async () => {
+    const {
+      parseSourceText,
+      looksLikeIsasaCentralRegionCalendar,
+      isIsasaCentralRegionCalendarUrl,
+      ISASA_CENTRAL_REGION_2026_PDF_URL,
+    } = await import("./parseSource");
+    const { eventsToIcs } = await import("./ics");
+    const extract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/isasa-sahisa-central-region-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    // Recorded pdf-parse of the live Brescia PDF — guideline, not a school calendar
+    assert.match(extract, /only a guideline/i);
+    assert.match(extract, /4 TERM CALENDAR/);
+    assert.match(extract, /3 TERM CALENDAR/);
+    assert.ok(looksLikeIsasaCentralRegionCalendar(extract));
+    assert.ok(
+      isIsasaCentralRegionCalendarUrl(ISASA_CENTRAL_REGION_2026_PDF_URL)
+    );
+    // Do not treat leftover 2021 PDFs / Wikipedia as this feed
+    assert.doesNotMatch(extract, /2021|wikipedia|Holiday Club|PREP-2021/i);
+
+    const { events, title } = parseSourceText(extract, new Date("2026-08-24"), {
+      sourceTitle: "ISASA.and.SAHISA.Central.Region.Calendar.2026.pdf",
+      sourceUrl: ISASA_CENTRAL_REGION_2026_PDF_URL,
+    });
+    assert.match(title, /GUIDELINE/i);
+    assert.match(title, /Central Region/i);
+
+    function mustSpan(
+      summary: string,
+      startYmd: string,
+      endExclusiveYmd: string,
+      allDay = true
+    ) {
+      const hit = events.find(
+        (e) =>
+          e.summary === summary &&
+          e.start.startsWith(startYmd) &&
+          e.end.startsWith(endExclusiveYmd) &&
+          e.allDay === allDay
+      );
+      assert.ok(
+        hit,
+        `missing ${summary} ${startYmd}→${endExclusiveYmd}; got ${events
+          .map(
+            (e) =>
+              `${e.summary}|${e.start.slice(0, 10)}→${e.end.slice(0, 10)}`
+          )
+          .join("; ")}`
+      );
+      return hit!;
+    }
+
+    // 4-term Start/Close — do not mix with 3-term Close days
+    mustSpan("4-term Term 1 2026", "2026-01-14", "2026-03-28");
+    mustSpan("4-term Term 2 2026", "2026-04-14", "2026-06-27");
+    mustSpan("4-term Term 3 2026", "2026-07-21", "2026-09-24");
+    mustSpan("4-term Term 4 2026", "2026-10-13", "2026-12-03");
+    mustSpan("Freedom Day", "2026-04-27", "2026-04-28");
+    mustSpan("4-term Mid-Term", "2026-04-28", "2026-05-01");
+    mustSpan("Workers' Day", "2026-05-01", "2026-05-02");
+    mustSpan("School Holiday", "2026-06-15", "2026-06-16");
+    mustSpan("Youth Day", "2026-06-16", "2026-06-17");
+    mustSpan("Women's Day", "2026-08-09", "2026-08-10");
+    mustSpan("Women's Day observed", "2026-08-10", "2026-08-11");
+
+    // 3-term Start/Close + half terms + holidays (own column only)
+    mustSpan("3-term Term 1 2026", "2026-01-14", "2026-04-11");
+    mustSpan("3-term Term 2 2026", "2026-05-06", "2026-08-08");
+    mustSpan("3-term Term 3 2026", "2026-09-09", "2026-12-05");
+    mustSpan("Human Rights Day", "2026-03-21", "2026-03-22");
+    mustSpan("Easter", "2026-04-03", "2026-04-07");
+    mustSpan("Heritage Day", "2026-09-24", "2026-09-25");
+    // Parenthetical date-only rows — written day, not a name stolen from 4-term
+    mustSpan("15 June 2026", "2026-06-15", "2026-06-16");
+    mustSpan("25 September 2026", "2026-09-25", "2026-09-26");
+
+    const ht1 = events.find(
+      (e) =>
+        e.summary === "3-term Half Term" && e.start.startsWith("2026-02-19")
+    );
+    assert.ok(ht1, "3-term T1 half term CLOSE 19 Feb");
+    assert.equal(ht1!.allDay, false);
+    assert.equal(ht1!.timeZone, "Africa/Johannesburg");
+    assert.match(ht1!.start, /T10:00:00\.000Z$/);
+    assert.match(ht1!.end, /^2026-02-23T22:00:00\.000Z$/);
+
+    mustSpan("3-term Half Term", "2026-06-26", "2026-07-06", true);
+
+    const ht3 = events.find(
+      (e) =>
+        e.summary === "3-term Half Term" && e.start.startsWith("2026-10-22")
+    );
+    assert.ok(ht3, "3-term T3 half term CLOSE 22 Oct (+12h00 on next line)");
+    assert.equal(ht3!.allDay, false);
+    assert.match(ht3!.start, /T10:00:00\.000Z$/);
+    assert.match(ht3!.end, /^2026-10-26T22:00:00\.000Z$/);
+
+    // Youth Day labeled in both columns on the same day — one parent fact
+    assert.equal(
+      events.filter((e) => e.summary === "Youth Day").length,
+      1
+    );
+    mustSpan("Youth Day", "2026-06-16", "2026-06-17");
+
+    // Do not invent 4-term Close as a 3-term bound (or the reverse)
+    assert.ok(
+      !events.some(
+        (e) =>
+          e.summary === "3-term Term 1 2026" && e.end.startsWith("2026-03-28")
+      )
+    );
+    assert.ok(
+      !events.some(
+        (e) =>
+          e.summary === "4-term Term 1 2026" && e.end.startsWith("2026-04-11")
+      )
+    );
+    // No OCR / Wikipedia / auto-mint path for this Extra
+    assert.ok(!events.some((e) => /^Start\b|^Close\b|^CLOSE\b|^RETURN\b/i.test(e.summary)));
+
+    const ics = eventsToIcs(
+      "central-region-test",
+      title,
+      events,
+      new Date("2026-08-24T12:00:00Z"),
+      ISASA_CENTRAL_REGION_2026_PDF_URL
+    );
+    assert.match(ics, /SUMMARY:4-term Term 1 2026/);
+    assert.match(ics, /SUMMARY:3-term Term 1 2026/);
+    assert.match(ics, /SUMMARY:4-term Mid-Term/);
+    assert.match(
+      ics,
+      /DTSTART;TZID=Africa\/Johannesburg:20260219T120000[\s\S]*?DTEND;TZID=Africa\/Johannesburg:20260224T000000[\s\S]*?SUMMARY:3-term Half Term/
+    );
   });
 
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {

@@ -27,6 +27,8 @@ const WESTERN_CAPE_FEED_ID =
  * from the English PDF linked on that page — not Grade 12 / NSC exam URLs.
  * Stithians Extra stays hidden until PDF term/holiday PERIODS match.
  * Ridgewood Extra: Term N spans + page half terms + named holidays (not PDF).
+ * ISASA/SAHISA Central Region Extra: 2026 GUIDELINE PDF (4-term + 3-term) —
+ * not a specific school’s calendar; watch the Brescia PDF URL, not isasa.org HTML.
  * Extra tiles (no feedId) must preview via POST /api/preview — never auto-mint.
  */
 const EXAMPLES: {
@@ -42,6 +44,11 @@ const EXAMPLES: {
   {
     label: "Ridgewood College terms + holidays 2026",
     url: "https://ridgewoodcollege.co.za/term-dates/",
+  },
+  {
+    label:
+      "ISASA/SAHISA Central Region 2026 GUIDELINE (4-term + 3-term)",
+    url: "https://www.brescia.co.za/uploads/files/Calendars/ISASA.and.SAHISA.Central.Region.Calendar.2026.pdf",
   },
 ];
 
