@@ -18,7 +18,9 @@ import { assertPublicHttpUrl, fetchSource } from "./fetchSource";
 import {
   isWesternCapeSchoolCalendarUrl,
   parseSourceText,
+  parseWesternCapeExamPage,
   parseWesternCapePlanningPdf,
+  WESTERN_CAPE_EXAM_PAGE_URLS,
   WESTERN_CAPE_PLANNING_PDF_URL,
 } from "./parseSource";
 import {
@@ -65,7 +67,8 @@ function isStale(watch: WatchRecord, now: Date): boolean {
 
 /**
  * Parse primary source; for the Western Cape school-calendar page also ingest
- * the English planning PDF linked on that page into the same watch.
+ * the English planning PDF and Grade 12 / NSC exam nav pages linked from that
+ * site into the same watch.
  */
 async function parseWatchSource(
   sourceUrl: string,
@@ -84,10 +87,20 @@ async function parseWatchSource(
     try {
       const pdf = await fetchSource(WESTERN_CAPE_PLANNING_PDF_URL, fetcher);
       const planning = parseWesternCapePlanningPdf(pdf.text);
-      all = [...events, ...planning];
-      hashMaterial = fetchedText + "\n" + pdf.text;
+      all = [...all, ...planning];
+      hashMaterial = hashMaterial + "\n" + pdf.text;
     } catch {
       // Terms + holidays from the HTML still ship; planning may be 0.
+    }
+    for (const examUrl of WESTERN_CAPE_EXAM_PAGE_URLS) {
+      try {
+        const page = await fetchSource(examUrl, fetcher);
+        const examEvents = parseWesternCapeExamPage(page.text);
+        all = [...all, ...examEvents];
+        hashMaterial = hashMaterial + "\n" + page.text;
+      } catch {
+        // Optional enrichment — school-calendar HTML + planning still ship.
+      }
     }
   }
   return {

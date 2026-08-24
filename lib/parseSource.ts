@@ -666,6 +666,21 @@ export const WESTERN_CAPE_SCHOOL_CALENDAR_URL =
 export const WESTERN_CAPE_PLANNING_PDF_URL =
   "https://www.westerncape.gov.za/education/files/wcg-blob-files?file=2025-12/circ28_25-2026-planning-calendar-for-schools.pdf&type=file";
 
+/**
+ * Grade 12 / NSC / exam nav pages linked from the school-calendar chrome
+ * (other pages — not dates on the school-calendar HTML itself).
+ * Afrikaans/IsiXhosa planning PDFs are the same calendar as English (no
+ * extra parent day-dates); exam pages carry proven day-level dates the
+ * English planning PDF left month-only or TBC.
+ */
+export const WESTERN_CAPE_EXAM_PAGE_URLS = [
+  "https://www.westerncape.gov.za/education/exams",
+  "https://www.westerncape.gov.za/education/national-senior-certificate-nsc-exams",
+  "https://www.westerncape.gov.za/education/national-senior-certificate-nsc-exams-june",
+  "https://www.westerncape.gov.za/education/senior-certificate-sc-exams-mayjune",
+  "https://www.westerncape.gov.za/education/matric-awards",
+] as const;
+
 export function isWesternCapeSchoolCalendarUrl(url: string): boolean {
   try {
     const u = new URL(url);
@@ -1329,9 +1344,147 @@ function parsePlanningDueDate(
 }
 
 /**
+ * Parent-usable day-dated rows from WCED Grade 12 / NSC / exam nav HTML
+ * (source wording). Only patterns with an explicit day; skips the
+ * August-2027 typo on Nov manual registration; does not invent month bounds.
+ */
+export function parseWesternCapeExamPage(text: string): ParsedEvent[] {
+  const cleaned = text.replace(/\u00a0/g, " ");
+  const flat = cleaned.replace(/\s+/g, " ").trim();
+  const events: ParsedEvent[] = [];
+  const seen = new Set<string>();
+
+  function push(summary: string, start: Date, end?: Date) {
+    const s = summary.replace(/\s+/g, " ").trim().slice(0, 160);
+    if (!s) return;
+    const first = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const last = end
+      ? new Date(end.getFullYear(), end.getMonth(), end.getDate())
+      : first;
+    const key = `${s}|${first.toISOString()}|${last.toISOString()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    events.push(allDaySpan(s, s, first, last));
+  }
+
+  function day(d: number, monthName: string, y: number): Date | null {
+    const month = MONTHS[monthName.toLowerCase()];
+    if (month == null) return null;
+    return parseDateParts(d, month, y);
+  }
+
+  // NSC May/June exam: commence + conclude (not planning #138 month-only)
+  const nscSpan = flat.match(
+    new RegExp(
+      String.raw`NSC\s+May\/June\s+2026\s+exam\s+commences\s+on:\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})[\s\S]{0,240}?exam\s+concludes\s+on\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "i"
+    )
+  );
+  if (nscSpan) {
+    const a = day(Number(nscSpan[1]), nscSpan[2], Number(nscSpan[3]));
+    const b = day(Number(nscSpan[4]), nscSpan[5], Number(nscSpan[6]));
+    if (a && b) push("NSC May/June 2026 exam", a, b);
+  }
+
+  // SC FAQ corroboration (same span; deduped if NSC already emitted)
+  const scSpan = flat.match(
+    new RegExp(
+      String.raw`Date\s+of\s+June\s+2026\s+SC\s+Exam:\s*(\d{1,2})\s+(${MONTH_ALT})\s*[–—−-]\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "i"
+    )
+  );
+  if (scSpan) {
+    const a = day(Number(scSpan[1]), scSpan[2], Number(scSpan[5]));
+    const b = day(Number(scSpan[3]), scSpan[4], Number(scSpan[5]));
+    if (a && b) push("June 2026 SC Exam", a, b);
+  }
+
+  // Results day from exam pages (planning #209 is month-only / empty)
+  const results = flat.match(
+    new RegExp(
+      String.raw`Release\s+of\s+the\s+May\/June\s+2026\s+NSC\/SC\s+examination\s+results:\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "i"
+    )
+  );
+  if (results) {
+    const d = day(Number(results[1]), results[2], Number(results[3]));
+    if (d) {
+      push(
+        "Release of the May/June 2026 NSC/SC examination results",
+        d
+      );
+    }
+  }
+
+  // Nov 2026 script remark window stated on Nov NSC page
+  const remark = flat.match(
+    new RegExp(
+      String.raw`Remarking\|rechecking\s+applications:\s*(\d{1,2})\s*[–—−-]\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "i"
+    )
+  );
+  if (remark) {
+    const a = day(Number(remark[1]), remark[3], Number(remark[4]));
+    const b = day(Number(remark[2]), remark[3], Number(remark[4]));
+    if (a && b) push("Remarking|rechecking applications", a, b);
+  }
+
+  // June 2027 NSC|SC registration windows (day bounds from source; skip Aug-2027 typo)
+  const juneRegBlock = new RegExp(
+    String.raw`Registration:\s*June\s+2027\s+NSC\|SC\s+examination\s+(Online\s+Registration:[\s\S]{0,220}?Manual\s+Registration:\s*\d{1,2}\s+\w+\s+20\d{2}\s*[–—−-]\s*\d{1,2}\s+\w+\s+20\d{2})`,
+    "gi"
+  );
+  let blockM: RegExpExecArray | null;
+  while ((blockM = juneRegBlock.exec(flat)) !== null) {
+    const block = blockM[1];
+    const online = block.match(
+      new RegExp(
+        String.raw`Online\s+Registration:\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\s*[–—−-]\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+        "i"
+      )
+    );
+    if (online) {
+      const a = day(Number(online[1]), online[2], Number(online[3]));
+      const b = day(Number(online[4]), online[5], Number(online[6]));
+      if (a && b) {
+        push("Online Registration for June 2027 NSC|SC examination", a, b);
+      }
+    }
+    const manual = block.match(
+      new RegExp(
+        String.raw`Manual\s+Registration:\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\s*[–—−-]\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+        "i"
+      )
+    );
+    if (manual) {
+      const a = day(Number(manual[1]), manual[2], Number(manual[3]));
+      const b = day(Number(manual[4]), manual[5], Number(manual[6]));
+      // Drop the Nov-2026 form window mistyped as August 2027 on the June page
+      if (a && b && !(a.getMonth() === 7 && a.getFullYear() === 2027)) {
+        push("Manual Registration for June 2027 NSC|SC examination", a, b);
+      }
+    }
+  }
+
+  // Matric 2025 awards only (confirmed on awards page; planning #43 is TBC)
+  for (const kind of ["Schools", "Candidates"] as const) {
+    const re = new RegExp(
+      String.raw`Matric\s+2025\s+Awards\s+to\s+${kind}\s*\|\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "i"
+    );
+    const m = flat.match(re);
+    if (!m) continue;
+    const d = day(Number(m[1]), m[2], Number(m[3]));
+    if (d) push(`Matric 2025 Awards to ${kind}`, d);
+  }
+
+  return events;
+}
+
+/**
  * English WCED planning PDF: religious observances + curated parent-facing
  * admission/NSC rows (PDF wording). Untitled CEMIS/sign-off/QMS/LTSM admin mush
- * is dropped. Does not scrape Grade 12 / NSC exam nav URLs.
+ * is dropped. Grade 12 / NSC exam nav URLs are parsed separately.
  */
 export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
   const cleaned = text.replace(/\u00a0/g, " ");

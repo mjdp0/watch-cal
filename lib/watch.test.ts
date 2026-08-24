@@ -109,7 +109,7 @@ describe("homepage examples and copy", () => {
       page,
       /stithian\.com\/uploads\/files\/St_Stithians_College_Calendar_2026/
     );
-    // NSC exam URLs are other pages — not scraped / not tiled
+    // NSC exam URLs are other pages — not tiled on the homepage (scraped into WC watch)
     assert.doesNotMatch(page, /NSC exams/);
     assert.doesNotMatch(
       page,
@@ -1267,6 +1267,166 @@ describe("parseSource", () => {
           e.start.startsWith("2026-05-01") && e.end.startsWith("2026-07-01")
       ),
       "no invented May–June month span"
+    );
+  });
+
+  it("WC exam nav pages emit proven parent day-dates (not planning #138/#209 invent)", async () => {
+    const { parseWesternCapeExamPage, parseWesternCapePlanningPdf } =
+      await import("./parseSource");
+
+    const nsc = await readFile(
+      path.join(process.cwd(), "lib/fixtures/western-cape-nsc-exams-extract.txt"),
+      "utf8"
+    );
+    const nscJune = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-nsc-exams-june-extract.txt"
+      ),
+      "utf8"
+    );
+    const sc = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-sc-exams-mayjune-extract.txt"
+      ),
+      "utf8"
+    );
+    const examsHub = await readFile(
+      path.join(process.cwd(), "lib/fixtures/western-cape-exams-extract.txt"),
+      "utf8"
+    );
+    const awards = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-matric-awards-extract.txt"
+      ),
+      "utf8"
+    );
+
+    const fromExam = [
+      ...parseWesternCapeExamPage(nsc),
+      ...parseWesternCapeExamPage(nscJune),
+      ...parseWesternCapeExamPage(sc),
+      ...parseWesternCapeExamPage(examsHub),
+      ...parseWesternCapeExamPage(awards),
+    ];
+
+    function must(
+      summaryRe: RegExp,
+      startYmd: string,
+      endYmd: string,
+      label: string
+    ) {
+      const hit = fromExam.find(
+        (e) =>
+          summaryRe.test(e.summary) &&
+          e.start.startsWith(startYmd) &&
+          e.end.startsWith(endYmd)
+      );
+      assert.ok(
+        hit,
+        `exam MUST missing: ${label} SUMMARY~${summaryRe} ${startYmd}→${endYmd}`
+      );
+      return hit!;
+    }
+
+    // NSC page: commence 11 May / conclude 24 June (timetable last paper day)
+    must(
+      /^NSC May\/June 2026 exam$/,
+      "2026-05-11",
+      "2026-06-25",
+      "NSC May/June exam span"
+    );
+    // SC FAQ same span, distinct title
+    must(
+      /^June 2026 SC Exam$/,
+      "2026-05-11",
+      "2026-06-25",
+      "SC June exam span"
+    );
+    // Exam hub / June pages: results day (not planning #209 month-only)
+    must(
+      /^Release of the May\/June 2026 NSC\/SC examination results$/,
+      "2026-08-07",
+      "2026-08-08",
+      "May/June results 7 Aug"
+    );
+    must(
+      /^Remarking\|rechecking applications$/,
+      "2027-01-12",
+      "2027-01-26",
+      "remark window 12–25 Jan 2027"
+    );
+    must(
+      /^Online Registration for June 2027 NSC\|SC examination$/,
+      "2026-10-01",
+      "2027-02-06",
+      "June 2027 online registration"
+    );
+    must(
+      /^Manual Registration for June 2027 NSC\|SC examination$/,
+      "2026-11-02",
+      "2027-02-06",
+      "June 2027 manual registration"
+    );
+    must(
+      /^Matric 2025 Awards to Schools$/,
+      "2026-01-29",
+      "2026-01-30",
+      "Matric 2025 awards schools"
+    );
+    must(
+      /^Matric 2025 Awards to Candidates$/,
+      "2026-01-29",
+      "2026-01-30",
+      "Matric 2025 awards candidates"
+    );
+
+    // Do not emit historical award ceremonies or the Aug-2027 registration typo
+    assert.ok(
+      !fromExam.some((e) => /Matric 2024 Awards/i.test(e.summary)),
+      "historical Matric 2024 awards not emitted"
+    );
+    assert.ok(
+      !fromExam.some(
+        (e) =>
+          /Manual Registration/i.test(e.summary) &&
+          e.start.startsWith("2027-08-07")
+      ),
+      "do not ship Manual Registration 7 Aug 2027 typo"
+    );
+
+    // Planning PDF alone still must not invent #138/#209 day bounds
+    const planning = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const fromPlan = parseWesternCapePlanningPdf(planning);
+    assert.equal(
+      fromPlan.filter((e) =>
+        /May\/June NSC and SC examinations/i.test(e.summary)
+      ).length,
+      0,
+      "planning still drops #138 month-only"
+    );
+    assert.equal(
+      fromPlan.filter((e) =>
+        /^Release of May\/June NSC\/SC examination results$/i.test(e.summary)
+      ).length,
+      0,
+      "planning still drops #209 month-only"
+    );
+    // Exam-page results title includes "the" + "2026" — distinct from #209 wording
+    assert.ok(
+      fromExam.some((e) =>
+        /^Release of the May\/June 2026 NSC\/SC examination results$/.test(
+          e.summary
+        )
+      )
     );
   });
 
