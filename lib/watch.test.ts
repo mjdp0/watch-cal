@@ -1306,6 +1306,13 @@ describe("parseSource", () => {
       ),
       "utf8"
     );
+    const secondChance = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-second-chance-extract.txt"
+      ),
+      "utf8"
+    );
 
     // Cross-page merge: /exams + nsc-june + sc-mayjune share results/registration
     const fromExam = parseWesternCapeExamPages([
@@ -1314,6 +1321,7 @@ describe("parseSource", () => {
       sc,
       examsHub,
       awards,
+      secondChance,
     ]);
 
     function must(
@@ -1434,6 +1442,21 @@ describe("parseSource", () => {
     assert.equal(
       countFact("Matric 2025 Awards to Candidates", "2026-01-29"),
       1
+    );
+    // Second Chance page (linked from /exams): tutoring registration Saturday
+    must(
+      /^Registration to attend the second chance tutoring classes$/,
+      "2026-08-22",
+      "2026-08-23",
+      "Second Chance tutoring registration 22 Aug 2026"
+    );
+    assert.equal(
+      countFact(
+        "Registration to attend the second chance tutoring classes",
+        "2026-08-22"
+      ),
+      1,
+      "Second Chance registration once"
     );
 
     // Same summary+dtstart fact → one UID in the ICS (no triplicate VEVENTs)

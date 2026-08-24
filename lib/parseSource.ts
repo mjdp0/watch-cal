@@ -668,7 +668,8 @@ export const WESTERN_CAPE_PLANNING_PDF_URL =
 
 /**
  * Grade 12 / NSC / exam nav pages linked from the school-calendar chrome
- * (other pages — not dates on the school-calendar HTML itself).
+ * (other pages — not dates on the school-calendar HTML itself), including
+ * Second Chance Matric Programme when it states a tutoring registration day.
  * Afrikaans/IsiXhosa planning PDFs are the same calendar as English (no
  * extra parent day-dates); exam pages carry proven day-level dates the
  * English planning PDF left month-only or TBC.
@@ -679,6 +680,7 @@ export const WESTERN_CAPE_EXAM_PAGE_URLS = [
   "https://www.westerncape.gov.za/education/national-senior-certificate-nsc-exams-june",
   "https://www.westerncape.gov.za/education/senior-certificate-sc-exams-mayjune",
   "https://www.westerncape.gov.za/education/matric-awards",
+  "https://www.westerncape.gov.za/education/second-chance-matric-programme",
 ] as const;
 
 /**
@@ -1490,6 +1492,20 @@ export function parseWesternCapeExamPage(text: string): ParsedEvent[] {
     if (!m) continue;
     const d = day(Number(m[1]), m[2], Number(m[3]));
     if (d) push(`Matric 2025 Awards to ${kind}`, d);
+  }
+
+  // Second Chance Matric Programme page (linked from /exams): tutoring registration day
+  const scmp = flat.match(
+    new RegExp(
+      String.raw`Registration\s+to\s+attend\s+the\s+second\s+chance\s+tutoring\s+classes\s+will\s+take\s+place[\s\S]{0,80}?on\s+Saturday,\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "i"
+    )
+  );
+  if (scmp) {
+    const d = day(Number(scmp[1]), scmp[2], Number(scmp[3]));
+    if (d) {
+      push("Registration to attend the second chance tutoring classes", d);
+    }
   }
 
   return events;
