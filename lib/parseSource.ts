@@ -658,12 +658,318 @@ function dropChromeLines(text: string): string {
     .join("\n");
 }
 
+/** Live Western Cape school-calendar page (terms + holidays; planning PDF linked). */
+export const WESTERN_CAPE_SCHOOL_CALENDAR_URL =
+  "https://www.westerncape.gov.za/education/school-calendar";
+
+/** English Planning Calendar PDF linked from that page (decode &amp;). */
+export const WESTERN_CAPE_PLANNING_PDF_URL =
+  "https://www.westerncape.gov.za/education/files/wcg-blob-files?file=2025-12/circ28_25-2026-planning-calendar-for-schools.pdf&type=file";
+
+export function isWesternCapeSchoolCalendarUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      /(^|\.)westerncape\.gov\.za$/i.test(u.hostname) &&
+      /\/education\/school-calendar\/?$/i.test(u.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function looksLikeWesternCapeSchoolCalendar(text: string): boolean {
+  return (
+    /Terms \(All Provinces\)/i.test(text) &&
+    /\bOpens:\s*\d{1,2}\s+\w+\s+20\d{2}/i.test(text) &&
+    /\bCloses:\s*\d{1,2}\s+\w+\s+20\d{2}/i.test(text) &&
+    /\(1\)\s*for Educators/i.test(text)
+  );
+}
+
+type WcBound = { date: Date; mark: 1 | 2 | null };
+
+function parseWcBounds(line: string): WcBound[] {
+  const out: WcBound[] = [];
+  const re = new RegExp(
+    String.raw`(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})(?:\s*\((\d+)\))?`,
+    "gi"
+  );
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(line)) !== null) {
+    const month = MONTHS[m[2].toLowerCase()];
+    if (month == null) continue;
+    const date = parseDateParts(Number(m[1]), month, Number(m[3]));
+    if (!date) continue;
+    const markRaw = m[4] ? Number(m[4]) : null;
+    const mark = markRaw === 1 || markRaw === 2 ? (markRaw as 1 | 2) : null;
+    out.push({ date, mark });
+  }
+  return out;
+}
+
+function allDaySpan(
+  summary: string,
+  description: string,
+  open: Date,
+  close: Date
+): ParsedEvent {
+  const start = new Date(open.getFullYear(), open.getMonth(), open.getDate());
+  const last = new Date(close.getFullYear(), close.getMonth(), close.getDate());
+  const end = new Date(last);
+  end.setDate(end.getDate() + 1);
+  return {
+    summary,
+    description,
+    start: start.toISOString(),
+    end: end.toISOString(),
+    allDay: true,
+  };
+}
+
+function allDayDay(
+  summary: string,
+  description: string,
+  day: Date
+): ParsedEvent {
+  return allDaySpan(summary, description, day, day);
+}
+
+function pickBound(bounds: WcBound[], mark: 1 | 2): Date | null {
+  const hit = bounds.find((b) => b.mark === mark);
+  if (hit) return hit.date;
+  const single = bounds.find((b) => b.mark == null);
+  return single ? single.date : null;
+}
+
+function termSpansForYear(
+  termN: number,
+  year: number,
+  opensLine: string,
+  closesLine: string
+): ParsedEvent[] {
+  const opens = parseWcBounds(opensLine);
+  const closes = parseWcBounds(closesLine);
+  if (!opens.length || !closes.length) return [];
+
+  const dual =
+    (opens.some((b) => b.mark === 1) || closes.some((b) => b.mark === 1)) &&
+    (opens.some((b) => b.mark === 2) || closes.some((b) => b.mark === 2));
+
+  if (dual) {
+    const openStaff = pickBound(opens, 1);
+    const openLearn = pickBound(opens, 2);
+    const closeStaff = pickBound(closes, 1);
+    const closeLearn = pickBound(closes, 2);
+    if (!openStaff || !openLearn || !closeStaff || !closeLearn) return [];
+    const same =
+      openStaff.getTime() === openLearn.getTime() &&
+      closeStaff.getTime() === closeLearn.getTime();
+    if (!same) {
+      return [
+        allDaySpan(
+          `Term ${termN} ${year} (staff)`,
+          opensLine + " / " + closesLine,
+          openStaff,
+          closeStaff
+        ),
+        allDaySpan(
+          `Term ${termN} ${year} (learners)`,
+          opensLine + " / " + closesLine,
+          openLearn,
+          closeLearn
+        ),
+      ];
+    }
+  }
+
+  const open = opens[0]?.date;
+  const close = closes[closes.length - 1]?.date;
+  if (!open || !close) return [];
+  return [
+    allDaySpan(
+      `Term ${termN} ${year}`,
+      opensLine + " / " + closesLine,
+      open,
+      close
+    ),
+  ];
+}
+
+/**
+ * Western Cape school-calendar HTML: term Opens/Closes → one dated SPAN per
+ * term (DTSTART=opens, DTEND exclusive = day after closes), titled Term N YYYY.
+ * Dual staff/learner bounds → two spans. Holidays stay named all-day days with year.
+ */
+export function parseWesternCapeSchoolCalendarHtml(
+  text: string
+): { title: string; events: ParsedEvent[] } {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const events: ParsedEvent[] = [];
+  let year: number | null = null;
+  let termN: number | null = null;
+  let opensLine: string | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    const yearHead = line.match(/\b(20\d{2})\s+School Calendar\b/i);
+    if (yearHead) {
+      year = Number(yearHead[1]);
+      termN = null;
+      opensLine = null;
+      continue;
+    }
+    const holHead = line.match(/\b(20\d{2})\s+Public Holidays\b/i);
+    if (holHead) {
+      year = Number(holHead[1]);
+      termN = null;
+      opensLine = null;
+      continue;
+    }
+
+    const ord = line.match(/^(First|Second|Third|Fourth)\b/i);
+    if (ord && year != null) {
+      termN = TERM_ORDINAL[ord[1].toLowerCase()] ?? null;
+      opensLine = null;
+      continue;
+    }
+
+    if (termN != null && year != null && /^Opens:/i.test(line)) {
+      opensLine = line;
+      continue;
+    }
+    if (
+      termN != null &&
+      year != null &&
+      opensLine &&
+      /^Closes:/i.test(line)
+    ) {
+      events.push(...termSpansForYear(termN, year, opensLine, line));
+      opensLine = null;
+      termN = null;
+      continue;
+    }
+
+    // "1 January 2026 – New Year's Day"
+    const hol = line.match(
+      new RegExp(
+        String.raw`^(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\s*[–—−-]\s*(.+)$`,
+        "i"
+      )
+    );
+    if (hol) {
+      const month = MONTHS[hol[2].toLowerCase()];
+      const y = Number(hol[3]);
+      const date = month == null ? null : parseDateParts(Number(hol[1]), month, y);
+      const name = hol[4].replace(/\s+/g, " ").trim();
+      if (date && name.length >= 3 && !isJunkSummary(name)) {
+        events.push(
+          allDayDay(`${name} ${y}`, line, date)
+        );
+      }
+    }
+  }
+
+  return {
+    title: "School Calendar | Western Cape Government",
+    events,
+  };
+}
+
+/**
+ * English WCED planning PDF: emit only clearly titled observances / named days
+ * from the religious-observances tables. Untitled or admin-deadline mush is dropped.
+ */
+export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
+  const cleaned = text.replace(/\u00a0/g, " ");
+  const events: ParsedEvent[] = [];
+  const seen = new Set<string>();
+
+  function push(summary: string, day: Date, endDay?: Date) {
+    const s = summary.replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!s || isJunkSummary(s) || WEEKDAY_ONLY.test(s)) return;
+    if (/\b(sunset)\b/i.test(s) && !/^sukkot\b/i.test(s)) {
+      // keep "Sukkot" without glued "(sunset)" noise when we can
+    }
+    const start = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    const last = endDay
+      ? new Date(endDay.getFullYear(), endDay.getMonth(), endDay.getDate())
+      : start;
+    const key = `${s}|${start.toISOString()}|${last.toISOString()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    events.push(allDaySpan(s, s, start, last));
+  }
+
+  function isObservanceLabel(label: string): boolean {
+    return /(eid|passover|ascension|shavuot|rosh\s*hashana|yom\s*kippur|sukkot|shemini|simchat|diwali)/i.test(
+      label
+    );
+  }
+
+  // Same-line observances (weekday may be glued: "Ascension DayThursday14 May 2026")
+  const namedDay = new RegExp(
+    String.raw`((?:Eid ul Fitr|Eid ul Adha|Passover|Ascension Day|Shavuot|Rosh Hashana|Yom Kippur|Sukkot|Shemini Atzeret and Simchat Torah|Diwali)(?:\s*\(date may vary\))?)\s*(?:${WEEKDAY_ALT})?\s*(?:\(?sunset\)?)?\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+    "gi"
+  );
+  let m: RegExpExecArray | null;
+  while ((m = namedDay.exec(cleaned)) !== null) {
+    const label = m[1].replace(/\s+/g, " ").trim();
+    const month = MONTHS[m[3].toLowerCase()];
+    if (month == null) continue;
+    const date = parseDateParts(Number(m[2]), month, Number(m[4]));
+    if (!date) continue;
+    push(label, date);
+  }
+
+  // Multi-line religious blocks: label then date lines
+  const lines = cleaned.split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim());
+  for (let i = 0; i < lines.length; i++) {
+    let name = lines[i];
+    if (/^Shemini Atzeret and Simchat$/i.test(name) && /torah/i.test(lines[i + 1] || "")) {
+      name = "Shemini Atzeret and Simchat Torah";
+    }
+    if (!isObservanceLabel(name)) continue;
+    if (/^(Eid ul Fitr|Eid ul Adha|Ascension Day|Yom Kippur|Sukkot|Diwali)\b/i.test(name)) {
+      // Usually handled by same-line pattern; still allow multi-line dates below
+    }
+    const dates: Date[] = [];
+    for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+      const dm = lines[j].match(
+        new RegExp(String.raw`^(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})$`, "i")
+      );
+      if (dm) {
+        const month = MONTHS[dm[2].toLowerCase()];
+        if (month == null) continue;
+        const d = parseDateParts(Number(dm[1]), month, Number(dm[3]));
+        if (d) dates.push(d);
+        continue;
+      }
+      if (WEEKDAY_ONLY.test(lines[j])) continue;
+      if (/^\(?sunset\)?$/i.test(lines[j])) continue;
+      if (/^Torah$/i.test(lines[j])) continue;
+      if (dates.length) break;
+      if (/^[A-Za-z]/.test(lines[j]) && !WEEKDAY_ONLY.test(lines[j])) break;
+    }
+    for (const d of dates) push(name, d);
+  }
+
+  return events;
+}
+
 /**
  * Conservative dated-event extractor for HTML/PDF plain text.
  * Year is required on the line, or inherited only for written date ranges and
  * holiday lines when a document-level year is known (title, filename, or a
  * clear calendar year already on the page). Never invents days from outline
  * numbers; never uses SUMMARY "Watched event". Returns [] when none found.
+ *
+ * Western Cape school-calendar HTML is a special case: terms become year-titled
+ * SPANS (not yearless open/close dots); holidays keep the year in the name.
  */
 export function parseSourceText(
   text: string,
@@ -673,6 +979,15 @@ export function parseSourceText(
   const cleaned = dropChromeLines(text.replace(/\u00a0/g, " ").trim());
   const title = pageTitle(cleaned);
   if (!cleaned) return { title: "WatchCal feed", events: [] };
+
+  if (
+    looksLikeWesternCapeSchoolCalendar(cleaned) ||
+    (opts?.sourceUrl && isWesternCapeSchoolCalendarUrl(opts.sourceUrl))
+  ) {
+    if (looksLikeWesternCapeSchoolCalendar(cleaned)) {
+      return parseWesternCapeSchoolCalendarHtml(cleaned);
+    }
+  }
 
   const inheritYear = inferDocumentYear(cleaned, opts);
   const dates = findDates(cleaned, inheritYear);

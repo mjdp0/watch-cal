@@ -23,8 +23,8 @@ const WESTERN_CAPE_FEED_ID =
 
 /**
  * Only ship example tiles whose feed matches what a parent would read on the
- * source. Western Cape live feed is term open/close (+ some holidays) — not
- * the full page (no Grade 12 / NSC / June exam blocks, no Planning Calendar).
+ * source. Western Cape watch: term SPANS + page holidays + planning observances
+ * from the English PDF linked on that page — not Grade 12 / NSC exam URLs.
  * Extra PDF tiles stay omitted until titles match the source, not crumbs.
  * Extra tiles (no feedId) must preview via POST /api/preview — never auto-mint.
  */
@@ -34,7 +34,7 @@ const EXAMPLES: {
   feedId?: string;
 }[] = [
   {
-    label: "Western Cape term open/close (partial)",
+    label: "Western Cape terms + planning (partial)",
     url: "https://www.westerncape.gov.za/education/school-calendar",
     feedId: WESTERN_CAPE_FEED_ID,
   },
