@@ -1900,11 +1900,12 @@ describe("parseSource", () => {
     assert.match(ht3!.start, /T10:00:00\.000Z$/);
     assert.match(ht3!.end, /^2026-10-26T22:00:00\.000Z$/);
 
-    // Two Youth Day rows (one per column) — same day, both labeled in source
+    // Youth Day labeled in both columns on the same day — one parent fact
     assert.equal(
       events.filter((e) => e.summary === "Youth Day").length,
-      2
+      1
     );
+    mustSpan("Youth Day", "2026-06-16", "2026-06-17");
 
     // Do not invent 4-term Close as a 3-term bound (or the reverse)
     assert.ok(

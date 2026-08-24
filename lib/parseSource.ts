@@ -2320,18 +2320,21 @@ export function parseIsasaCentralRegionCalendar(
       ? cleaned.slice(threeMark, fourMark)
       : cleaned.slice(threeMark);
 
-  const events = [
-    ...parseCentralRegionSystem(
+  // Columns stay separate for bounds; identical parent facts (e.g. Youth Day
+  // labeled in both columns on the same day) emit once — same bar as WC
+  // results-duplicate FAIL.
+  const events = mergeWesternCapeExamEvents([
+    parseCentralRegionSystem(
       normalizeCentralRegionLines(fourText),
       year,
       "4-term"
     ),
-    ...parseCentralRegionSystem(
+    parseCentralRegionSystem(
       normalizeCentralRegionLines(threeText),
       year,
       "3-term"
     ),
-  ];
+  ]);
 
   return {
     title: "ISASA / SAHISA Central Region 2026 GUIDELINE",
