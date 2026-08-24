@@ -625,10 +625,72 @@ describe("parseSource", () => {
       "progression appeal close"
     );
 
+    // Next parent-usable batch (PDF wording / due-date column)
+    must(
+      /^Submit applications for NSC examination re-marks and rechecks$/,
+      "2026-01-13",
+      "2026-01-28",
+      "#37 NSC re-mark/recheck window"
+    );
+    must(
+      /^Principals communicate outcomes of progression\/promotion appeals to parents in writing$/,
+      "2026-01-23",
+      "2026-01-24",
+      "#39 principals communicate appeal outcomes"
+    );
+    must(
+      /^Closing date for parents dissatisfied with the outcome of their progression\/promotion appeals, to appeal to district directors$/,
+      "2026-01-30",
+      "2026-01-31",
+      "#45 parent appeal to district directors"
+    );
+    must(
+      /^Parents confirm acceptance of transfer placements$/,
+      "2026-09-16",
+      "2026-10-01",
+      "#201 parents confirm transfer placements"
+    );
+    must(
+      /^Grade 11 subject change applications by parents$/,
+      "2026-03-27",
+      "2026-03-28",
+      "#58 Grade 11 subject change by parents"
+    );
+    must(
+      /^Grade 10 subject change applications by parents$/,
+      "2026-06-26",
+      "2026-06-27",
+      "#147 Grade 10 subject change by parents"
+    );
+    must(
+      /^Subject change applications by parents of Grade 11 learners [–—−-] for Grade 12 year$/,
+      "2026-12-11",
+      "2026-12-12",
+      "#280 Grade 11→12 subject change by parents"
+    );
+
+    // #209 PDF is month-only ("August 2026") — must NOT invent 31 Jul or 1–31 Aug
+    const mayJuneResults = events.filter((e) =>
+      /Release of May\/June NSC\/SC examination results/i.test(e.summary)
+    );
+    assert.equal(
+      mayJuneResults.length,
+      0,
+      "#209 May/June results dropped — PDF cell is month-only August 2026"
+    );
+    for (const e of mayJuneResults) {
+      assert.notEqual(e.start.slice(0, 10), "2026-07-31", "do not invent 31 Jul");
+      assert.notEqual(e.start.slice(0, 10), "2026-08-01", "do not invent 1 Aug");
+    }
+
     // Do not dump untitled admin mush; do not invent absent 102–117
     assert.doesNotMatch(
       events.map((e) => e.summary).join("\n"),
       /Snap Survey|job descriptions|Quality Management System|\bLTSM\b|WCED 043/i
+    );
+    assert.ok(
+      !events.some((e) => /\b102\b|\b117\b/.test(e.summary)),
+      "do not invent absent items 102–117"
     );
   });
 
@@ -655,6 +717,37 @@ describe("parseSource", () => {
     assert.match(open!.start, /^2026-03-11/);
     assert.match(open!.end, /^2026-03-12/);
     assert.doesNotMatch(open!.start, /^2026-03-10/);
+
+    // New parent rows also follow the due-date cell, not a hardcoded day
+    const moved37 = extract.replace(
+      /(37\.\s+Submit applications for NSC examination re-marks and[\s\S]*?)13 to 27 January 2026/,
+      "$114 to 28 January 2026"
+    );
+    assert.match(moved37, /37\.[\s\S]*?14 to 28 January 2026/);
+    const events37 = parseWesternCapePlanningPdf(moved37);
+    const remark = events37.find(
+      (e) =>
+        e.summary ===
+        "Submit applications for NSC examination re-marks and rechecks"
+    );
+    assert.ok(remark);
+    assert.match(remark!.start, /^2026-01-14/);
+    assert.match(remark!.end, /^2026-01-29/);
+    assert.doesNotMatch(remark!.start, /^2026-01-13/);
+
+    const moved201 = extract.replace(
+      /(201\.\s+Parents confirm acceptance of transfer placements\s+)16 to 30 September 2026/,
+      "$117 to 29 September 2026"
+    );
+    assert.match(moved201, /201\.[\s\S]*?17 to 29 September 2026/);
+    const events201 = parseWesternCapePlanningPdf(moved201);
+    const transferConfirm = events201.find(
+      (e) => e.summary === "Parents confirm acceptance of transfer placements"
+    );
+    assert.ok(transferConfirm);
+    assert.match(transferConfirm!.start, /^2026-09-17/);
+    assert.match(transferConfirm!.end, /^2026-09-30/);
+    assert.doesNotMatch(transferConfirm!.start, /^2026-09-16/);
   });
 
   it("item #42 due date stays 27 Jan when 29 Jan sits before 43. in the extract", async () => {
@@ -683,6 +776,28 @@ describe("parseSource", () => {
     assert.match(row42!.end, /^2026-01-28/);
     assert.doesNotMatch(row42!.start, /^2026-01-29/);
 
+    // Fixture truth: #42 is 27 January 2026 (not 29)
+    const fixture = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const fixtureEvents = parseWesternCapePlanningPdf(fixture);
+    const fixture42 = fixtureEvents.find(
+      (e) =>
+        e.summary ===
+        "Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations"
+    );
+    assert.ok(fixture42, "#42 must emit from fixture");
+    assert.match(
+      fixture42!.start,
+      /^2026-01-27/,
+      "#42 fixture DTSTART must be 27 Jan not 29"
+    );
+    assert.doesNotMatch(fixture42!.start, /^2026-01-29/);
+
     // Glued same-line next marker must also cut the block
     const glued = [
       "42. Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations 27 January 2026 29 January 2026 43. NSC Awards Ceremony 29 January 2026",
@@ -696,6 +811,37 @@ describe("parseSource", () => {
     assert.ok(glued42, "#42 must emit from glued extract");
     assert.match(glued42!.start, /^2026-01-27/);
     assert.doesNotMatch(glued42!.start, /^2026-01-29/);
+  });
+
+  it("month-only planning cells do not invent day bounds (#138, #209)", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    const invent = [
+      "2026 SCHOOL PLANNING CALENDAR",
+      "138. May/June NSC and SC examinations May and June 2026",
+      "209. Release of May/June NSC/SC examination results August 2026",
+      "210. Release of May/June NSC/SC re-mark/recheck results September 2026",
+    ].join("\n");
+    const events = parseWesternCapePlanningPdf(invent);
+    assert.equal(
+      events.filter((e) => /May\/June NSC and SC examinations/i.test(e.summary))
+        .length,
+      0,
+      "#138 must not invent 1 May–30 Jun"
+    );
+    assert.equal(
+      events.filter((e) =>
+        /Release of May\/June NSC\/SC examination results/i.test(e.summary)
+      ).length,
+      0,
+      "#209 must not invent August day bounds"
+    );
+    assert.ok(
+      !events.some(
+        (e) =>
+          e.start.startsWith("2026-05-01") && e.end.startsWith("2026-07-01")
+      ),
+      "no invented May–June month span"
+    );
   });
 
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {
