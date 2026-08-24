@@ -970,25 +970,55 @@ const WC_PLANNING_PARENT_ROWS: Array<{
   },
 ];
 
-/** Slice text for numbered activity `N.` through the next activity / section. */
+/**
+ * Slice text for numbered activity `N.` through the next activity / section.
+ * Stops at the next item marker even when pdftotext glues it on the same line
+ * (so #43’s date cannot land inside #42’s block).
+ */
 function numberedActivityBlock(text: string, item: number): string | null {
   const startRe = new RegExp(String.raw`(^|\n)\s*${item}\.\s+`, "m");
   const sm = startRe.exec(text);
   if (!sm) return null;
   const start = sm.index + sm[0].length;
   const rest = text.slice(start);
-  // Next "N. " activity row (not section "3.1.2")
-  const nextAct = /\n\s*\d+\.\s+/.exec(rest);
-  // Section heading "3.1.2 …"
-  const nextSec = /\n\s*\d+\.\d+/.exec(rest);
+
+  /** Index of the digit that starts the next `N.` marker, or null. */
+  function nextMarkerIndex(re: RegExp): number | null {
+    const m = re.exec(rest);
+    if (!m) return null;
+    const dig = rest.slice(m.index).match(/\d+\./);
+    if (!dig || dig.index == null) return null;
+    return m.index + dig.index;
+  }
+
+  // Prefer immediate next item (42 → 43), including glued same-line markers.
+  const nextExact = nextMarkerIndex(
+    new RegExp(String.raw`(^|\n|\s)${item + 1}\.\s+(?=[A-Za-z(])`, "m")
+  );
+  // Any other activity "N. Title" (not this item, not section "3.1.2")
+  let nextAny: number | null = null;
+  const anyM = /(?:^|\n|\s)(\d+)\.\s+(?=[A-Za-z(])/m.exec(rest);
+  if (anyM && Number(anyM[1]) !== item) {
+    nextAny = nextMarkerIndex(
+      new RegExp(
+        String.raw`(^|\n|\s)${anyM[1]}\.\s+(?=[A-Za-z(])`,
+        "m"
+      )
+    );
+  }
+  const nextSec = /(?:^|\n)\s*\d+\.\d+/.exec(rest);
+
   let end = rest.length;
-  if (nextAct) end = Math.min(end, nextAct.index);
+  if (nextExact != null) end = Math.min(end, nextExact);
+  else if (nextAny != null) end = Math.min(end, nextAny);
   if (nextSec) end = Math.min(end, nextSec.index);
   return rest.slice(0, end);
 }
 
 /**
  * Parse due-date column bounds from an activity block.
+ * Prefers the first due-date cell after the title (not the last date in a
+ * leaked blob — e.g. #43’s 29 Jan must not override #42’s 27 Jan).
  * Returns null for empty cells, TBC, month-only ("May and June 2026"), etc.
  */
 function parsePlanningDueDate(
@@ -996,67 +1026,60 @@ function parsePlanningDueDate(
 ): { start: Date; end: Date } | null {
   const flat = block.replace(/\s+/g, " ").trim();
   if (!flat) return null;
-  if (/to\s+be\s+confirmed|^\s*ongoing\b/i.test(flat) && !/\d{1,2}\s+\w+\s+20\d{2}/i.test(flat)) {
+  if (
+    /to\s+be\s+confirmed|^\s*ongoing\b/i.test(flat) &&
+    !/\d{1,2}\s+\w+\s+20\d{2}/i.test(flat)
+  ) {
     return null;
   }
 
-  // "28 May to 10 June 2026" / "02 February to 23 October 2026"
-  const cross = flat.match(
-    new RegExp(
-      String.raw`(\d{1,2})\s+(${MONTH_ALT})\s*(?:to|[–—−-])\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
-      "i"
-    )
+  // Find the earliest due-date expression in the cell (title comes first in PDF).
+  type Hit = { index: number; start: Date; end: Date };
+  const hits: Hit[] = [];
+
+  const crossRe = new RegExp(
+    String.raw`(\d{1,2})\s+(${MONTH_ALT})\s*(?:to|[–—−-])\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+    "gi"
   );
-  if (cross) {
-    const m1 = MONTHS[cross[2].toLowerCase()];
-    const m2 = MONTHS[cross[4].toLowerCase()];
-    const y = Number(cross[5]);
-    if (m1 == null || m2 == null) return null;
-    const start = parseDateParts(Number(cross[1]), m1, y);
-    const end = parseDateParts(Number(cross[3]), m2, y);
-    if (!start || !end) return null;
-    return { start, end };
+  let m: RegExpExecArray | null;
+  while ((m = crossRe.exec(flat)) !== null) {
+    const m1 = MONTHS[m[2].toLowerCase()];
+    const m2 = MONTHS[m[4].toLowerCase()];
+    const y = Number(m[5]);
+    if (m1 == null || m2 == null) continue;
+    const start = parseDateParts(Number(m[1]), m1, y);
+    const end = parseDateParts(Number(m[3]), m2, y);
+    if (start && end) hits.push({ index: m.index, start, end });
   }
 
-  // "16 to 18 September 2026"
-  const sameMonth = flat.match(
-    new RegExp(
-      String.raw`(\d{1,2})\s+to\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
-      "i"
-    )
+  const sameRe = new RegExp(
+    String.raw`(\d{1,2})\s+to\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+    "gi"
   );
-  if (sameMonth) {
-    const month = MONTHS[sameMonth[3].toLowerCase()];
-    const y = Number(sameMonth[4]);
-    if (month == null) return null;
-    const start = parseDateParts(Number(sameMonth[1]), month, y);
-    const end = parseDateParts(Number(sameMonth[2]), month, y);
-    if (!start || !end) return null;
-    return { start, end };
+  while ((m = sameRe.exec(flat)) !== null) {
+    const month = MONTHS[m[3].toLowerCase()];
+    const y = Number(m[4]);
+    if (month == null) continue;
+    const start = parseDateParts(Number(m[1]), month, y);
+    const end = parseDateParts(Number(m[2]), month, y);
+    if (start && end) hits.push({ index: m.index, start, end });
   }
 
-  // Month-only / month-pair with no day — e.g. "May and June 2026", "August 2026"
-  // Do not invent 1st/last-of-month bounds.
-  const hasDayMonthYear =
-    /\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+20\d{2}/i.test(
-      flat
-    );
-  if (!hasDayMonthYear) return null;
-
-  // Single day — last day+month+year in the block (due-date column)
   const dayRe = new RegExp(
     String.raw`(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
     "gi"
   );
-  let last: RegExpExecArray | null = null;
-  let dm: RegExpExecArray | null;
-  while ((dm = dayRe.exec(flat)) !== null) last = dm;
-  if (!last) return null;
-  const month = MONTHS[last[2].toLowerCase()];
-  if (month == null) return null;
-  const day = parseDateParts(Number(last[1]), month, Number(last[3]));
-  if (!day) return null;
-  return { start: day, end: day };
+  while ((m = dayRe.exec(flat)) !== null) {
+    const month = MONTHS[m[2].toLowerCase()];
+    if (month == null) continue;
+    const day = parseDateParts(Number(m[1]), month, Number(m[3]));
+    if (day) hits.push({ index: m.index, start: day, end: day });
+  }
+
+  if (!hits.length) return null;
+  hits.sort((a, b) => a.index - b.index);
+  // Prefer the earliest due-date cell (title/date column), not a later leaked date.
+  return { start: hits[0].start, end: hits[0].end };
 }
 
 /**

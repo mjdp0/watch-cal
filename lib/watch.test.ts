@@ -657,6 +657,47 @@ describe("parseSource", () => {
     assert.doesNotMatch(open!.start, /^2026-03-10/);
   });
 
+  it("item #42 due date stays 27 Jan when 29 Jan sits before 43. in the extract", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    // Live pdftotext risk: #43’s 29 Jan still appears in the #42 column blob
+    // before the "43." marker — must not become #42’s DTSTART.
+    const extract = [
+      "2026 SCHOOL PLANNING CALENDAR",
+      "42. Closing date for registrations for May/June 2026",
+      "NSC/Senior Certificate (SC) examinations",
+      "27 January 2026",
+      "29 January 2026",
+      "43. NSC Awards Ceremony",
+      "29 January 2026",
+      "(To be confirmed)",
+      "44. Grade 12 subject changes processed on CEMIS 30 January 2026",
+    ].join("\n");
+    const events = parseWesternCapePlanningPdf(extract);
+    const row42 = events.find(
+      (e) =>
+        e.summary ===
+        "Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations"
+    );
+    assert.ok(row42, "#42 must emit");
+    assert.match(row42!.start, /^2026-01-27/, "#42 DTSTART must be 27 Jan not 29");
+    assert.match(row42!.end, /^2026-01-28/);
+    assert.doesNotMatch(row42!.start, /^2026-01-29/);
+
+    // Glued same-line next marker must also cut the block
+    const glued = [
+      "42. Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations 27 January 2026 29 January 2026 43. NSC Awards Ceremony 29 January 2026",
+    ].join("\n");
+    const gluedEvents = parseWesternCapePlanningPdf(glued);
+    const glued42 = gluedEvents.find(
+      (e) =>
+        e.summary ===
+        "Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations"
+    );
+    assert.ok(glued42, "#42 must emit from glued extract");
+    assert.match(glued42!.start, /^2026-01-27/);
+    assert.doesNotMatch(glued42!.start, /^2026-01-29/);
+  });
+
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {
     // Recorded pdf-parse extract of
     // St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf — not a live fetch.
