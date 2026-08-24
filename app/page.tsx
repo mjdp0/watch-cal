@@ -25,7 +25,8 @@ const WESTERN_CAPE_FEED_ID =
  * Only ship example tiles whose feed matches what a parent would read on the
  * source. Western Cape watch: term SPANS + page holidays + planning observances
  * from the English PDF linked on that page — not Grade 12 / NSC exam URLs.
- * Extra PDF tiles stay omitted until titles match the source, not crumbs.
+ * Stithians Extra stays hidden until PDF term/holiday PERIODS match.
+ * Ridgewood Extra: year-stamped START/CLOSE → Term N YYYY spans only.
  * Extra tiles (no feedId) must preview via POST /api/preview — never auto-mint.
  */
 const EXAMPLES: {
@@ -37,6 +38,10 @@ const EXAMPLES: {
     label: "Western Cape terms + planning (partial)",
     url: "https://www.westerncape.gov.za/education/school-calendar",
     feedId: WESTERN_CAPE_FEED_ID,
+  },
+  {
+    label: "Ridgewood College terms 2026",
+    url: "https://ridgewoodcollege.co.za/term-dates/",
   },
 ];
 
