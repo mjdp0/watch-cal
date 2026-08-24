@@ -26,7 +26,7 @@ const WESTERN_CAPE_FEED_ID =
  * source. Western Cape watch: term SPANS + page holidays + planning observances
  * from the English PDF linked on that page — not Grade 12 / NSC exam URLs.
  * Stithians Extra stays hidden until PDF term/holiday PERIODS match.
- * Ridgewood Extra: year-stamped START/CLOSE → Term N YYYY spans only.
+ * Ridgewood Extra: Term N spans + page half terms + named holidays (not PDF).
  * Extra tiles (no feedId) must preview via POST /api/preview — never auto-mint.
  */
 const EXAMPLES: {
@@ -40,7 +40,7 @@ const EXAMPLES: {
     feedId: WESTERN_CAPE_FEED_ID,
   },
   {
-    label: "Ridgewood College terms 2026",
+    label: "Ridgewood College terms + holidays 2026",
     url: "https://ridgewoodcollege.co.za/term-dates/",
   },
 ];
