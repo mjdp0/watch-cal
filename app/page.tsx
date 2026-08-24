@@ -29,6 +29,9 @@ const WESTERN_CAPE_FEED_ID =
  * Ridgewood Extra: Term N spans + page half terms + named holidays (not PDF).
  * ISASA/SAHISA Central Region Extra: 2026 GUIDELINE PDF (4-term + 3-term) —
  * not a specific school’s calendar; watch the Brescia PDF URL, not isasa.org HTML.
+ * King David Extra: 2026 draft PDF (tile must say draft); incomplete T4 vacation omitted.
+ * Hilton Extra: official Start/to/Half term block + Full Calendar fixtures —
+ * leftover Start:/End: block must never mix in.
  * Extra tiles (no feedId) must preview via POST /api/preview — never auto-mint.
  */
 const EXAMPLES: {
@@ -49,6 +52,14 @@ const EXAMPLES: {
     label:
       "ISASA/SAHISA Central Region 2026 GUIDELINE (4-term + 3-term)",
     url: "https://www.brescia.co.za/uploads/files/Calendars/ISASA.and.SAHISA.Central.Region.Calendar.2026.pdf",
+  },
+  {
+    label: "King David 2026 calendar (draft)",
+    url: "https://kingdavid.org.za/wp-content/uploads/2025/06/2026-Draft-Calendar-May-2025-2.pdf",
+  },
+  {
+    label: "Hilton College terms + fixtures 2026",
+    url: "https://hiltoncollege.com/the-hilton-calendar/",
   },
 ];
 

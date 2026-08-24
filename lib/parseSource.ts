@@ -2342,6 +2342,557 @@ export function parseIsasaCentralRegionCalendar(
   };
 }
 
+/** Live King David Schools 2026 draft calendar PDF. */
+export const KING_DAVID_2026_DRAFT_PDF_URL =
+  "https://kingdavid.org.za/wp-content/uploads/2025/06/2026-Draft-Calendar-May-2025-2.pdf";
+
+export function isKingDavid2026DraftCalendarUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      /(^|\.)kingdavid\.org\.za$/i.test(u.hostname) &&
+      /2026-Draft-Calendar/i.test(u.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * King David draft PDF (pdf-parse). Requires the Draft header + TERMS table —
+ * not the landing page alone.
+ */
+export function looksLikeKingDavidDraftCalendar(text: string): boolean {
+  return (
+    /2026\s+CALENDAR/i.test(text) &&
+    /\(\s*Draft\b/i.test(text) &&
+    /\bTERMS\b/i.test(text) &&
+    /SCHOOL\s+SESSION/i.test(text) &&
+    /JEWISH\s+HOLIDAYS/i.test(text)
+  );
+}
+
+/** Join pdf-parse ordinal line-breaks: "12\\nth\\n" → "12th". */
+function normalizeKingDavidPdfText(text: string): string {
+  return normalizeDashEntities(text.replace(/\u00a0/g, " "))
+    .replace(/(\d+)\s*\n\s*(st|nd|rd|th)\b/gi, "$1$2")
+    .replace(/(\d+)(st|nd|rd|th)\s*\n\s*/gi, "$1$2 ");
+}
+
+type KdDateRange = { start: Date; end: Date; raw: string };
+
+function parseKingDavidDayMonth(
+  dayRaw: string,
+  monthRaw: string,
+  year: number
+): Date | null {
+  const month = MONTHS[monthRaw.toLowerCase()];
+  if (month == null) return null;
+  return parseDateParts(Number(dayRaw), month, year);
+}
+
+/** "13th January–31st March" / "2nd – 9th April" / "4th December - 12th December". */
+function parseKingDavidRange(
+  raw: string,
+  year: number
+): KdDateRange | null {
+  const t = normalizeDashEntities(raw.replace(/\s+/g, " ").trim());
+  const cross = t.match(
+    new RegExp(
+      String.raw`^(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*[–—−-]\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*$`,
+      "i"
+    )
+  );
+  if (cross) {
+    const a = parseKingDavidDayMonth(cross[1], cross[2], year);
+    const b = parseKingDavidDayMonth(cross[3], cross[4], year);
+    if (a && b && b.getTime() >= a.getTime()) {
+      return { start: a, end: b, raw: t };
+    }
+    return null;
+  }
+  const same = t.match(
+    new RegExp(
+      String.raw`^(\d{1,2})(?:st|nd|rd|th)?\s*[–—−-]\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*$`,
+      "i"
+    )
+  );
+  if (same) {
+    const a = parseKingDavidDayMonth(same[1], same[3], year);
+    const b = parseKingDavidDayMonth(same[2], same[3], year);
+    if (a && b && b.getTime() >= a.getTime()) {
+      return { start: a, end: b, raw: t };
+    }
+  }
+  return null;
+}
+
+/** Single day, or slash pair "17th/18th February" / "15th /16th June". */
+function parseKingDavidDayOrSlash(
+  raw: string,
+  year: number
+): KdDateRange | null {
+  const t = normalizeDashEntities(raw.replace(/\s+/g, " ").trim());
+  const slash = t.match(
+    new RegExp(
+      String.raw`^(\d{1,2})(?:st|nd|rd|th)?\s*/\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*$`,
+      "i"
+    )
+  );
+  if (slash) {
+    const a = parseKingDavidDayMonth(slash[1], slash[3], year);
+    const b = parseKingDavidDayMonth(slash[2], slash[3], year);
+    if (a && b && b.getTime() >= a.getTime()) {
+      return { start: a, end: b, raw: t };
+    }
+    return null;
+  }
+  const one = t.match(
+    new RegExp(
+      String.raw`^(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*$`,
+      "i"
+    )
+  );
+  if (one) {
+    const d = parseKingDavidDayMonth(one[1], one[2], year);
+    if (d) return { start: d, end: d, raw: t };
+  }
+  return null;
+}
+
+function extractKingDavidDateTokens(blob: string): string[] {
+  const t = normalizeDashEntities(blob.replace(/\s+/g, " "));
+  const tokens: string[] = [];
+  // Longer ranges first so "26th September – 2nd October" is not split.
+  const re = new RegExp(
+    String.raw`\b(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*[–—−-]\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})` +
+      String.raw`|\b(\d{1,2})(?:st|nd|rd|th)?\s*[–—−-]\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})` +
+      String.raw`|\b(\d{1,2})(?:st|nd|rd|th)?(?:\s*/\s*(\d{1,2})(?:st|nd|rd|th)?)?\s+(${MONTH_ALT})`,
+    "gi"
+  );
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(t)) !== null) {
+    tokens.push(m[0].replace(/\s+/g, " ").trim());
+  }
+  return tokens;
+}
+
+function pairKingDavidNamedDates(
+  dateBlob: string,
+  names: string[],
+  year: number
+): ParsedEvent[] {
+  const tokens = extractKingDavidDateTokens(dateBlob);
+  if (!tokens.length || tokens.length !== names.length) return [];
+  const events: ParsedEvent[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const name = names[i].replace(/\s+/g, " ").trim();
+    if (name.length < 3) continue;
+    const range =
+      parseKingDavidRange(tokens[i], year) ||
+      parseKingDavidDayOrSlash(tokens[i], year);
+    if (!range) continue;
+    events.push(allDaySpan(name, `${tokens[i]} ${name}`, range.start, range.end));
+  }
+  return events;
+}
+
+/**
+ * King David 2026 draft calendar PDF: term school-session spans, complete
+ * vacation spans only, public + Jewish holidays paired from source columns.
+ * Incomplete T4 vacation ("10th December to") is dropped — never invent an end.
+ */
+export function parseKingDavidDraftCalendar(
+  text: string,
+  opts?: ParseSourceOptions
+): { title: string; events: ParsedEvent[] } {
+  const normalized = normalizeKingDavidPdfText(text);
+  // Prefer "2026 CALENDAR" / "2026-Draft" — URL path /uploads/2025/06/ and
+  // "(Draft – 29th May 2025)" must not steal the school year.
+  const year =
+    (() => {
+      const m = normalized.match(/\b(20\d{2})\s+CALENDAR\b/i);
+      return m ? Number(m[1]) : null;
+    })() ||
+    (() => {
+      const hint = [opts?.sourceTitle, opts?.sourceUrl].filter(Boolean).join(" ");
+      const m = hint.match(/\b(20\d{2})-Draft-Calendar\b/i);
+      return m ? Number(m[1]) : null;
+    })() ||
+    inferDocumentYear(normalized, opts);
+  const title = "King David 2026 CALENDAR (Draft)";
+  if (year == null) return { title, events: [] };
+
+  const events: ParsedEvent[] = [];
+  const flat = normalized.replace(/\s+/g, " ");
+
+  // Term rows: session range; optional "(Nth Teachers)"; vacation when both ends print.
+  const termRe = new RegExp(
+    String.raw`\b([1234])\s+` +
+      String.raw`(?:\(\s*(\d{1,2})(?:st|nd|rd|th)?\s+Teachers\s*\)\s*)?` +
+      String.raw`(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*[–—−-]\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})` +
+      String.raw`(?:[\s\S]*?(?:\(\d+\))?\s*\d+\s+)?` +
+      String.raw`(?:(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s*[–—−-]\s*(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})|` +
+      String.raw`(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s+to\b)?`,
+    "gi"
+  );
+  let tm: RegExpExecArray | null;
+  const seenTerms = new Set<number>();
+  while ((tm = termRe.exec(flat)) !== null) {
+    const termN = Number(tm[1]);
+    if (seenTerms.has(termN)) continue;
+    const session = parseKingDavidRange(
+      `${tm[3]} ${tm[4]}–${tm[5]} ${tm[6]}`,
+      year
+    );
+    if (!session) continue;
+    seenTerms.add(termN);
+    if (tm[2]) {
+      const staff = parseKingDavidDayMonth(tm[2], tm[4], year);
+      // Teachers day uses the session start month only when staff day sits in
+      // the same month as session open (source: "(12th Teachers) 13th January").
+      if (staff && staff.getTime() < session.start.getTime()) {
+        events.push(allDayDay("Teachers", tm[0], staff));
+      }
+    }
+    events.push(
+      allDaySpan(`Term ${termN} ${year}`, tm[0], session.start, session.end)
+    );
+    if (tm[7] && tm[8] && tm[9] && tm[10]) {
+      const vac = parseKingDavidRange(
+        `${tm[7]} ${tm[8]}–${tm[9]} ${tm[10]}`,
+        year
+      );
+      if (vac) {
+        events.push(
+          allDaySpan(`Vacation ${termN} ${year}`, tm[0], vac.start, vac.end)
+        );
+      }
+    }
+    // tm[11]+tm[12] = incomplete "10th December to" — intentionally ignored.
+  }
+
+  const pubNames = [
+    "New Year's Day",
+    "Human Rights Day",
+    "Good Friday",
+    "Family Day",
+    "Freedom Day",
+    "Worker's Day",
+    "Youth Day",
+    "National Women's Day",
+    "Heritage Day",
+    "Day of Reconciliation",
+  ];
+  const jewishNames = [
+    "Pesach",
+    "Shavuot",
+    "Rosh Hashana",
+    "Yom Kippur",
+    "Sukkot",
+    "Shemini Atzeret",
+    "Simchat Torah",
+  ];
+  const otherNames = [
+    "Rosh Chodesh Shevat",
+    "Tu B'shvat",
+    "Rosh Chodesh Adar",
+    "Ta'anit Esther",
+    "Purim",
+    "Rosh Chodesh Nissan",
+    "Yom Hashoah",
+    "Rosh Chodesh Iyar",
+    "Yom Hazikaron",
+    "Yom Ha'atzmaut",
+    "Lag Ba'Omer",
+    "Yom Yerushalayim",
+    "Rosh Chodesh Sivan",
+    "Rosh Chodesh Tammuz",
+    "Fast 17 Tammuz",
+    "Rosh Chodesh Av",
+    "Tisha B'Av",
+    "Tu B'Av",
+    "Rosh Chodesh Elul",
+    "Tzom Gedaliah",
+    "Rosh Chodesh Chesvan",
+    "Rosh Chodesh Kislev",
+    "Chanukah",
+  ];
+
+  const pubMark = normalized.search(/PUBLIC\s*&\s*SCHOOL\s+HOLIDAYS/i);
+  const jewishMark = normalized.search(/\bJEWISH\s+HOLIDAYS\b/i);
+  const otherMark = normalized.search(/OTHER\s+JEWISH\s+DATES/i);
+  if (pubMark >= 0 && jewishMark >= 0) {
+    // Column extract: public dates, then public names, then Jewish dates/names.
+    const afterHeaders = normalized.slice(Math.max(pubMark, jewishMark));
+    const otherSlice =
+      otherMark >= 0 ? normalized.slice(otherMark) : "";
+    const beforeOther =
+      otherMark >= 0 ? afterHeaders.slice(0, otherMark - Math.max(pubMark, jewishMark)) : afterHeaders;
+
+    const nameBlock = beforeOther.match(
+      /New\s+Year['\u2019]?s\s+Day[\s\S]*?Day\s+of\s+Reconciliation/i
+    );
+    const jewishNameBlock = beforeOther.match(
+      /\bPesach\b[\s\S]*?\bSimchat\s+Torah\b/i
+    );
+    // Public dates sit before "New Year's Day"; Jewish dates between Reconciliation and Pesach.
+    let pubDateBlob = beforeOther;
+    if (nameBlock) {
+      pubDateBlob = beforeOther.slice(0, nameBlock.index);
+    }
+    // Drop the JEWISH HOLIDAYS header crumbs from the date blob.
+    pubDateBlob = pubDateBlob.replace(/JEWISH\s+HOLIDAYS/i, " ");
+
+    let jewishDateBlob = "";
+    if (nameBlock && jewishNameBlock && jewishNameBlock.index != null) {
+      const afterPubNames = beforeOther.slice(
+        (nameBlock.index || 0) + nameBlock[0].length
+      );
+      const pesachAt = afterPubNames.search(/\bPesach\b/i);
+      jewishDateBlob =
+        pesachAt >= 0 ? afterPubNames.slice(0, pesachAt) : afterPubNames;
+    }
+
+    events.push(...pairKingDavidNamedDates(pubDateBlob, pubNames, year));
+    events.push(...pairKingDavidNamedDates(jewishDateBlob, jewishNames, year));
+
+    if (otherSlice) {
+      const otherNameBlock = otherSlice.match(
+        /Rosh\s+Chodesh\s+Shevat[\s\S]*?\bChanukah\b/i
+      );
+      let otherDateBlob = otherSlice.replace(/OTHER\s+JEWISH\s+DATES/i, " ");
+      if (otherNameBlock && otherNameBlock.index != null) {
+        otherDateBlob = otherDateBlob.slice(0, otherNameBlock.index);
+      }
+      events.push(...pairKingDavidNamedDates(otherDateBlob, otherNames, year));
+    }
+  }
+
+  return { title, events };
+}
+
+/** Live Hilton College calendar page. */
+export const HILTON_COLLEGE_CALENDAR_URL =
+  "https://hiltoncollege.com/the-hilton-calendar/";
+
+export function isHiltonCollegeCalendarUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      /(^|\.)hiltoncollege\.com$/i.test(u.hostname) &&
+      /the-hilton-calendar/i.test(u.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hilton College calendar page. Requires the official term block
+ * (Start / to … / Half term) — leftover Start:/End:/Half-term: alone is not enough.
+ */
+export function looksLikeHiltonCollegeCalendar(text: string): boolean {
+  const t = normalizeDashEntities(text.replace(/\u00a0/g, " "));
+  return (
+    (/hilton\s+college|the hilton calendar/i.test(t) ||
+      /2026\s+Term\s+Dates/i.test(t)) &&
+    /\bTuesday\s+13\s+January\b/i.test(t) &&
+    /\bto\s+Friday\s+27\s+March\b/i.test(t) &&
+    /\bHalf\s+term\b/i.test(t) &&
+    /\bThurs\s+19\s+Feb\b/i.test(t)
+  );
+}
+
+const HILTON_WEEKDAY_ALT =
+  "Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun";
+
+function parseHiltonDayMonth(
+  dayRaw: string,
+  monthRaw: string,
+  year: number
+): Date | null {
+  const month = MONTHS[monthRaw.toLowerCase()];
+  if (month == null) return null;
+  return parseDateParts(Number(dayRaw), month, year);
+}
+
+/**
+ * Official Hilton term block only. Leftover Start:/End:/Half-term: lines are
+ * skipped so the two conflicting 2026 blocks never mix.
+ */
+function parseHiltonOfficialTerms(
+  lines: string[],
+  year: number
+): ParsedEvent[] {
+  const events: ParsedEvent[] = [];
+  let termN: number | null = null;
+  let start: Date | null = null;
+  let expectingTo = false;
+  let expectingHalf = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Leftover block markers — stop reading terms (fixtures may follow earlier).
+    if (/^(Start:|End:|Half-term:)\s*$/i.test(line) || /^Start:/i.test(line)) {
+      termN = null;
+      start = null;
+      expectingTo = false;
+      expectingHalf = false;
+      continue;
+    }
+
+    const tm = line.match(/^Term\s+([1234])\s*$/i);
+    if (tm) {
+      termN = Number(tm[1]);
+      start = null;
+      expectingTo = false;
+      expectingHalf = false;
+      continue;
+    }
+    if (termN == null) continue;
+
+    // Official "Start" (no colon). Leftover "Start:" already handled above.
+    if (/^Start\s*$/i.test(line)) {
+      const next = lines[i + 1] || "";
+      const md = next.match(
+        new RegExp(
+          String.raw`^(?:${HILTON_WEEKDAY_ALT})\s+(\d{1,2})\s+(${MONTH_ALT})\s*$`,
+          "i"
+        )
+      );
+      if (md) {
+        start = parseHiltonDayMonth(md[1], md[2], year);
+        expectingTo = true;
+        i++;
+      }
+      continue;
+    }
+
+    if (expectingTo && start && /^to\s+/i.test(line)) {
+      const md = line.match(
+        new RegExp(
+          String.raw`^to\s+(?:${HILTON_WEEKDAY_ALT})\s+(\d{1,2})\s+(${MONTH_ALT})\s*$`,
+          "i"
+        )
+      );
+      if (md) {
+        const end = parseHiltonDayMonth(md[1], md[2], year);
+        if (end && end.getTime() >= start.getTime()) {
+          events.push(
+            allDaySpan(`Term ${termN} ${year}`, line, start, end)
+          );
+        }
+      }
+      start = null;
+      expectingTo = false;
+      continue;
+    }
+
+    if (/^Half\s+term\s*$/i.test(line)) {
+      expectingHalf = true;
+      continue;
+    }
+
+    if (expectingHalf) {
+      expectingHalf = false;
+      const half = normalizeDashEntities(line).match(
+        new RegExp(
+          String.raw`^(?:${HILTON_WEEKDAY_ALT})\s+(\d{1,2})\s+(${MONTH_ALT})\s*[–—−-]\s*(?:${HILTON_WEEKDAY_ALT})\s+(\d{1,2})\s+(${MONTH_ALT})\s*$`,
+          "i"
+        )
+      );
+      if (half) {
+        const a = parseHiltonDayMonth(half[1], half[2], year);
+        const b = parseHiltonDayMonth(half[3], half[4], year);
+        if (a && b && b.getTime() >= a.getTime()) {
+          events.push(allDaySpan("Half term", line, a, b));
+        }
+      }
+      continue;
+    }
+  }
+
+  return events;
+}
+
+/** Full Calendar rows: "28 February: …" / "24-25 April: Reunion Weekend". */
+function parseHiltonFixtureLine(
+  line: string,
+  year: number
+): ParsedEvent | null {
+  const raw = normalizeDashEntities(line.replace(/\s+/g, " ").trim());
+  const range = raw.match(
+    new RegExp(
+      String.raw`^(\d{1,2})\s*[–—−-]\s*(\d{1,2})\s+(${MONTH_ALT})\s*:\s*(.+)$`,
+      "i"
+    )
+  );
+  if (range) {
+    const name = range[4].replace(/\s+/g, " ").trim();
+    if (name.length < 3) return null;
+    const a = parseHiltonDayMonth(range[1], range[3], year);
+    const b = parseHiltonDayMonth(range[2], range[3], year);
+    if (!a || !b || b.getTime() < a.getTime()) return null;
+    return allDaySpan(name, raw, a, b);
+  }
+  const one = raw.match(
+    new RegExp(
+      String.raw`^(\d{1,2})\s+(${MONTH_ALT})\s*:\s*(.+)$`,
+      "i"
+    )
+  );
+  if (one) {
+    const name = one[3].replace(/\s+/g, " ").trim();
+    if (name.length < 3) return null;
+    const d = parseHiltonDayMonth(one[1], one[2], year);
+    if (!d) return null;
+    return allDayDay(name, raw, d);
+  }
+  return null;
+}
+
+/**
+ * Hilton College calendar: official 2026 term + half-term blocks (deduped) and
+ * Full Calendar fixtures with written day bounds. Leftover Start:/End: block
+ * is never read for dates.
+ */
+export function parseHiltonCollegeCalendar(
+  text: string,
+  opts?: ParseSourceOptions
+): { title: string; events: ParsedEvent[] } {
+  const cleaned = normalizeDashEntities(text.replace(/\u00a0/g, " "));
+  const year =
+    inferDocumentYear(cleaned, opts) ||
+    (() => {
+      const m = cleaned.match(/\b(20\d{2})\s+Term\s+Dates\b/i);
+      return m ? Number(m[1]) : null;
+    })();
+  const title = "The Hilton Calendar | Hilton College";
+  if (year == null || !looksLikeHiltonCollegeCalendar(cleaned)) {
+    return { title, events: [] };
+  }
+
+  const lines = cleaned
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  const termEvents = parseHiltonOfficialTerms(lines, year);
+  const fixtures: ParsedEvent[] = [];
+  for (const line of lines) {
+    // Skip leftover half-term day lists without labels / colon fixtures only.
+    const fix = parseHiltonFixtureLine(line, year);
+    if (fix) fixtures.push(fix);
+  }
+
+  return {
+    title,
+    events: mergeWesternCapeExamEvents([termEvents, fixtures]),
+  };
+}
+
 /**
  * Conservative dated-event extractor for HTML/PDF plain text.
  * Year is required on the line, or inherited only for written date ranges and
@@ -2354,15 +2905,19 @@ export function parseIsasaCentralRegionCalendar(
  * Independent START:/CLOSE: term pages (year-stamped) become Term N spans plus
  * that page’s half-term CLOSE→RETURN and named Public Holiday lines.
  * ISASA/SAHISA Central Region guideline PDF: 4-term + 3-term columns separately.
+ * King David draft PDF: term sessions + complete vacations + paired holidays.
+ * Hilton College page: official Start/to/Half term block only (+ fixtures).
  */
 export function parseSourceText(
   text: string,
   _now: Date = new Date(),
   opts?: ParseSourceOptions
 ): { title: string; events: ParsedEvent[] } {
-  const cleaned = dropChromeLines(text.replace(/\u00a0/g, " ").trim());
+  // Keep raw (pre-chrome-drop) for PDF ordinal line-breaks King David needs.
+  const raw = text.replace(/\u00a0/g, " ").trim();
+  const cleaned = dropChromeLines(raw);
   const title = pageTitle(cleaned);
-  if (!cleaned) return { title: "WatchCal feed", events: [] };
+  if (!cleaned && !raw) return { title: "WatchCal feed", events: [] };
 
   if (
     looksLikeWesternCapeSchoolCalendar(cleaned) ||
@@ -2378,6 +2933,22 @@ export function parseSourceText(
     (opts?.sourceUrl && isIsasaCentralRegionCalendarUrl(opts.sourceUrl))
   ) {
     return parseIsasaCentralRegionCalendar(cleaned, opts);
+  }
+
+  if (
+    looksLikeKingDavidDraftCalendar(raw) ||
+    looksLikeKingDavidDraftCalendar(cleaned) ||
+    (opts?.sourceUrl && isKingDavid2026DraftCalendarUrl(opts.sourceUrl))
+  ) {
+    // Ordinal crumbs ("12" / "th") are dropChromeLines false-positives.
+    return parseKingDavidDraftCalendar(raw || cleaned, opts);
+  }
+
+  if (
+    looksLikeHiltonCollegeCalendar(cleaned) ||
+    (opts?.sourceUrl && isHiltonCollegeCalendarUrl(opts.sourceUrl))
+  ) {
+    return parseHiltonCollegeCalendar(cleaned, opts);
   }
 
   if (looksLikeTermStartCloseCalendar(cleaned)) {
