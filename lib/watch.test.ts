@@ -5,7 +5,7 @@ import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { assertPublicHttpUrl } from "./fetchSource";
 import { eventUid, eventsToIcs, isValidVCalendar } from "./ics";
-import { htmlToText, parseSourceText } from "./parseSource";
+import { htmlToText, parseSourceText, WESTERN_CAPE_PLANNING_PDF_URL } from "./parseSource";
 import {
   FREE_WATCH_LIMIT,
   getWatch,
@@ -367,10 +367,18 @@ describe("parseSource", () => {
       sourceUrl: "https://www.westerncape.gov.za/education/school-calendar",
     });
 
-    // No yearless open/close rewrite
+    // HARD FAIL: yearless open/close dots or titles lacking year
     for (const e of events) {
       assert.doesNotMatch(e.summary, /^Term \d+ opens/i);
       assert.doesNotMatch(e.summary, /^Term \d+ closes/i);
+      if (/^Term \d+/i.test(e.summary)) {
+        assert.match(e.summary, /^Term \d+ 20\d{2}/);
+        // Span must be more than one day (exclusive end after close)
+        assert.ok(
+          new Date(e.end).getTime() - new Date(e.start).getTime() > 86400000,
+          `term must be a span, not a one-day dot: ${e.summary}`
+        );
+      }
     }
 
     const t1Staff = events.find((e) => e.summary === "Term 1 2026 (staff)");
@@ -415,9 +423,47 @@ describe("parseSource", () => {
     assert.match(nye2027!.start, /^2027-01-01/);
     assert.ok(events.some((e) => e.summary === "Good Friday 2026"));
     assert.ok(events.some((e) => e.summary === "Good Friday 2027"));
+
+    // HARD FAIL: 2027 holidays must not truncate (page lists 15)
+    const hol2027 = [
+      "New Year’s Day 2027",
+      "Human Rights Day 2027",
+      "Public holiday 2027", // 22 March
+      "Good Friday 2027",
+      "Family Day 2027",
+      "Special school holiday 2027",
+      "Freedom Day 2027",
+      "Workers’ Day 2027",
+      "Youth Day 2027",
+      "National Women’s Day 2027",
+      "Heritage Day 2027",
+      "Day of Reconciliation 2027",
+      "Christmas Day 2027",
+      "Day of Goodwill 2027",
+    ];
+    for (const name of hol2027) {
+      assert.ok(
+        events.some((e) => e.summary === name),
+        `missing 2027 holiday: ${name}`
+      );
+    }
+    // 27 Dec public holiday (second "Public holiday 2027")
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Public holiday 2027" && e.start.startsWith("2027-12-27")
+      ),
+      "27 Dec 2027 Public holiday"
+    );
+    assert.equal(
+      events.filter((e) => e.summary.endsWith("2027") && !/^Term /.test(e.summary))
+        .length,
+      15,
+      "all 15 page holidays for 2027"
+    );
   });
 
-  it("Western Cape planning PDF fixture emits titled observances (source wording)", async () => {
+  it("Western Cape planning PDF fixture emits parent-facing dated rows (not 0)", async () => {
     const { parseWesternCapePlanningPdf } = await import("./parseSource");
     const extract = await readFile(
       path.join(
@@ -426,12 +472,43 @@ describe("parseSource", () => {
       ),
       "utf8"
     );
+    assert.ok(extract.length > 1000, "planning fixture must be present");
     const events = parseWesternCapePlanningPdf(extract);
-    assert.ok(events.length > 0, "planning observances emit");
+    assert.ok(events.length > 0, "0 planning events is a fail");
+    // §2.1 religious observances
     assert.ok(events.some((e) => /Eid ul Fitr/i.test(e.summary)));
     assert.ok(events.some((e) => e.summary === "Passover"));
     assert.ok(events.some((e) => e.summary === "Diwali"));
     assert.ok(events.some((e) => e.summary === "Ascension Day"));
+    // Admissions windows
+    assert.ok(
+      events.some((e) =>
+        /School admissions open for Grades R, 1 and 8/i.test(e.summary)
+      )
+    );
+    assert.ok(
+      events.some((e) =>
+        /School admissions close for Grades R, 1 and 8/i.test(e.summary)
+      )
+    );
+    // NSC / parent result dates + trial exam start
+    assert.ok(
+      events.some((e) =>
+        /Release of the 2025 National Senior Certificate/i.test(e.summary)
+      )
+    );
+    assert.ok(
+      events.some((e) =>
+        /parents to appeal the progression\/promotion results/i.test(e.summary)
+      )
+    );
+    assert.ok(
+      events.some((e) =>
+        /Grade 12 September trial examinations earliest start date/i.test(
+          e.summary
+        )
+      )
+    );
     for (const e of events) {
       assert.doesNotMatch(
         e.summary,
@@ -439,10 +516,10 @@ describe("parseSource", () => {
       );
       assert.match(e.start, /^2026-/);
     }
-    // Not the full admin deadline calendar — only titled observances
+    // Not the full ~295 admin rows
     assert.doesNotMatch(
       events.map((e) => e.summary).join("\n"),
-      /Snap Survey|job descriptions|CEMIS/i
+      /Snap Survey|job descriptions|WCED 043/i
     );
   });
 
@@ -870,5 +947,64 @@ describe("watch feed lifecycle", { concurrency: false }, () => {
     assert.equal(threw, true);
     assert.equal(await getWatch(watchIdFromSourceUrl(sourceUrl), dataPath), null);
     sourceContentType = "text/html; charset=utf-8";
+  });
+});
+
+describe("Western Cape watch path merges HTML + planning fixture", { concurrency: false }, () => {
+  it("previewUrl for school-calendar uses planning PDF fixture text (not 0 planning)", async () => {
+    const htmlExtract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-school-calendar-extract.txt"
+      ),
+      "utf8"
+    );
+    const planningExtract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    assert.ok(planningExtract.includes("Religious"), "planning fixture unused?");
+
+    const htmlPage = `<html><head><title>School Calendar | Western Cape Government</title></head><body>${htmlExtract
+      .split("\n")
+      .map((l) => `<p>${l}</p>`)
+      .join("\n")}</body></html>`;
+
+    let planningFetches = 0;
+    const fetcher: typeof fetch = async (input) => {
+      const href = typeof input === "string" ? input : input.toString();
+      if (href.includes("school-calendar")) {
+        return new Response(htmlPage, {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      }
+      if (
+        href.includes("circ28_25-2026-planning-calendar-for-schools.pdf") ||
+        href === WESTERN_CAPE_PLANNING_PDF_URL
+      ) {
+        planningFetches += 1;
+        // text/plain so fetchSource returns the recorded extract without pdf-parse
+        return new Response(planningExtract, {
+          status: 200,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        });
+      }
+      return new Response("missing", { status: 404 });
+    };
+
+    const result = await previewUrl(
+      "https://www.westerncape.gov.za/education/school-calendar",
+      { fetcher, now: new Date("2026-08-24T00:00:00Z") }
+    );
+    assert.equal(planningFetches, 1, "planning PDF URL must be fetched");
+    // HTML alone is 41 events; planning adds parent-facing rows
+    assert.ok(
+      result.event_count > 41,
+      `planning must add events (got ${result.event_count}; 0 planning is a fail)`
+    );
   });
 });
