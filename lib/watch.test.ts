@@ -439,11 +439,263 @@ describe("parseSource", () => {
       );
       assert.match(e.start, /^2026-/);
     }
-    // Not the full admin deadline calendar — only titled observances
+    // Not the full admin deadline calendar — only titled observances + parent rows
     assert.doesNotMatch(
       events.map((e) => e.summary).join("\n"),
-      /Snap Survey|job descriptions|CEMIS/i
+      /Snap Survey|job descriptions|CEMIS|QMS|LTSM|sign off/i
     );
+  });
+
+  it("Western Cape school-calendar URL: HTML terms/holidays + planning parent MUST rows", async () => {
+    const {
+      parseWesternCapePlanningPdf,
+      parseWesternCapeSchoolCalendarHtml,
+      parseSourceText,
+    } = await import("./parseSource");
+    const html = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-school-calendar-extract.txt"
+      ),
+      "utf8"
+    );
+    const planning = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const { events: fromHtml } = parseSourceText(html, new Date("2026-08-24T00:00:00Z"), {
+      sourceTitle: "School Calendar | Western Cape Government",
+      sourceUrl: "https://www.westerncape.gov.za/education/school-calendar",
+    });
+    // Same special-case path (terms as year spans)
+    const { events: htmlDirect } = parseWesternCapeSchoolCalendarHtml(html);
+    assert.equal(fromHtml.length, htmlDirect.length);
+
+    const fromPlan = parseWesternCapePlanningPdf(planning);
+    const events = [...fromHtml, ...fromPlan];
+
+    // Keep term spans + full HTML holidays both years (no 40-cap truncation)
+    assert.ok(events.some((e) => e.summary === "Term 1 2026 (learners)"));
+    assert.ok(events.some((e) => e.summary === "Term 4 2027 (staff)"));
+    assert.ok(events.some((e) => e.summary === "New Year’s Day 2026"));
+    assert.ok(events.some((e) => e.summary === "New Year’s Day 2027"));
+    assert.ok(events.some((e) => e.summary === "Day of Goodwill 2027"));
+    assert.ok(events.some((e) => e.summary === "Public holiday 2027"));
+    const holidays2027 = events.filter(
+      (e) => /2027/.test(e.summary) && !/^Term\s/.test(e.summary)
+    );
+    assert.ok(
+      holidays2027.length >= 14,
+      `2027 holidays truncated? got ${holidays2027.length}`
+    );
+
+    // 14 religious observances from planning PDF
+    const religious = fromPlan.filter((e) =>
+      /(eid|passover|ascension|shavuot|rosh\s*hashana|yom\s*kippur|sukkot|shemini|diwali)/i.test(
+        e.summary
+      )
+    );
+    assert.equal(religious.length, 14, `expected 14 religious, got ${religious.length}`);
+
+    function must(
+      summaryRe: RegExp,
+      startYmd: string,
+      endYmd: string,
+      label: string
+    ) {
+      const hit = events.find(
+        (e) =>
+          summaryRe.test(e.summary) &&
+          e.start.startsWith(startYmd) &&
+          e.end.startsWith(endYmd)
+      );
+      assert.ok(
+        hit,
+        `MUST missing: ${label} SUMMARY~${summaryRe} DTSTART ${startYmd} DTEND ${endYmd}`
+      );
+      return hit!;
+    }
+
+    // Parent-facing MUST rows (PDF wording / dates from English planning fixture)
+    must(
+      /^School admissions open for Grades R, 1 and 8$/,
+      "2026-03-10",
+      "2026-03-11",
+      "admissions open R/1/8"
+    );
+    must(
+      /^School admissions close for Grades R, 1 and 8$/,
+      "2026-04-14",
+      "2026-04-15",
+      "admissions close R/1/8"
+    );
+    must(
+      /^Parents informed of the outcome of online admission applications$/,
+      "2026-05-28",
+      "2026-06-11",
+      "parents informed admissions"
+    );
+    must(
+      /^Parents confirm acceptance of Grades R, 1 and 8 placements$/,
+      "2026-05-28",
+      "2026-06-16",
+      "parents confirm placements"
+    );
+    must(
+      /^School admissions open for transfer requests$/,
+      "2026-08-03",
+      "2026-08-04",
+      "transfer open"
+    );
+    must(
+      /^School admissions close for transfer requests$/,
+      "2026-08-17",
+      "2026-08-18",
+      "transfer close"
+    );
+    must(
+      /^Parents are informed of the outcome per email\/SMS$/,
+      "2026-09-16",
+      "2026-09-19",
+      "parents informed transfers"
+    );
+    must(
+      /^Release of the 2025 National Senior Certificate \(NSC\) examination results$/,
+      "2026-01-13",
+      "2026-01-14",
+      "NSC 2025 results"
+    );
+    must(
+      /^Closing date for registrations for May\/June 2026 NSC\/Senior Certificate \(SC\) examinations$/,
+      "2026-01-27",
+      "2026-01-28",
+      "May/June NSC/SC reg close"
+    );
+    must(
+      /^Closing date for registrations for November 2026 NSC examinations [–—−-] full-time candidates$/,
+      "2026-03-13",
+      "2026-03-14",
+      "Nov NSC full-time reg close"
+    );
+    // #138 PDF is month-only ("May and June 2026") — must NOT invent 1 May–30 Jun
+    const mayJune = events.filter((e) =>
+      /May\/June NSC and SC examinations/i.test(e.summary)
+    );
+    for (const e of mayJune) {
+      assert.notEqual(
+        e.start.slice(0, 10),
+        "2026-05-01",
+        "May/June must not invent DTSTART 1 May"
+      );
+      assert.notEqual(
+        e.end.slice(0, 10),
+        "2026-07-01",
+        "May/June must not invent DTEND 1 Jul"
+      );
+      assert.ok(
+        /no exact days|month.?only|May and June 2026/i.test(e.summary),
+        "if May/June emits, title must say PDF has no exact days"
+      );
+    }
+    // Dropped (preferred): no calendar span without exact days
+    assert.equal(
+      mayJune.length,
+      0,
+      "May/June NSC/SC exams dropped — PDF has no exact days"
+    );
+    must(
+      /^Grade 12 September trial examinations earliest start date$/,
+      "2026-08-26",
+      "2026-08-27",
+      "trial earliest start"
+    );
+    must(
+      /^Grade 12 September trial examinations end date$/,
+      "2026-09-23",
+      "2026-09-24",
+      "trial end"
+    );
+    must(
+      /^Closing date for parents to appeal the progression\/promotion results of their children$/,
+      "2026-01-16",
+      "2026-01-17",
+      "progression appeal close"
+    );
+
+    // Do not dump untitled admin mush; do not invent absent 102–117
+    assert.doesNotMatch(
+      events.map((e) => e.summary).join("\n"),
+      /Snap Survey|job descriptions|Quality Management System|\bLTSM\b|WCED 043/i
+    );
+  });
+
+  it("Western Cape planning parent dates are parsed from the numbered due-date column", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    const extract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    // Same title, moved due date — parser must follow the extract, not a hardcoded day
+    const moved = extract.replace(
+      /(35\.\s+School admissions open for Grades R, 1 and 8[\s\S]*?)10 March 2026/,
+      "$111 March 2026"
+    );
+    assert.match(moved, /35\.[\s\S]*?11 March 2026/);
+    const events = parseWesternCapePlanningPdf(moved);
+    const open = events.find(
+      (e) => e.summary === "School admissions open for Grades R, 1 and 8"
+    );
+    assert.ok(open);
+    assert.match(open!.start, /^2026-03-11/);
+    assert.match(open!.end, /^2026-03-12/);
+    assert.doesNotMatch(open!.start, /^2026-03-10/);
+  });
+
+  it("item #42 due date stays 27 Jan when 29 Jan sits before 43. in the extract", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    // Live pdftotext risk: #43’s 29 Jan still appears in the #42 column blob
+    // before the "43." marker — must not become #42’s DTSTART.
+    const extract = [
+      "2026 SCHOOL PLANNING CALENDAR",
+      "42. Closing date for registrations for May/June 2026",
+      "NSC/Senior Certificate (SC) examinations",
+      "27 January 2026",
+      "29 January 2026",
+      "43. NSC Awards Ceremony",
+      "29 January 2026",
+      "(To be confirmed)",
+      "44. Grade 12 subject changes processed on CEMIS 30 January 2026",
+    ].join("\n");
+    const events = parseWesternCapePlanningPdf(extract);
+    const row42 = events.find(
+      (e) =>
+        e.summary ===
+        "Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations"
+    );
+    assert.ok(row42, "#42 must emit");
+    assert.match(row42!.start, /^2026-01-27/, "#42 DTSTART must be 27 Jan not 29");
+    assert.match(row42!.end, /^2026-01-28/);
+    assert.doesNotMatch(row42!.start, /^2026-01-29/);
+
+    // Glued same-line next marker must also cut the block
+    const glued = [
+      "42. Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations 27 January 2026 29 January 2026 43. NSC Awards Ceremony 29 January 2026",
+    ].join("\n");
+    const gluedEvents = parseWesternCapePlanningPdf(glued);
+    const glued42 = gluedEvents.find(
+      (e) =>
+        e.summary ===
+        "Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations"
+    );
+    assert.ok(glued42, "#42 must emit from glued extract");
+    assert.match(glued42!.start, /^2026-01-27/);
+    assert.doesNotMatch(glued42!.start, /^2026-01-29/);
   });
 
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {
