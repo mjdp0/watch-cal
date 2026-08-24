@@ -739,6 +739,72 @@ describe("parseSource", () => {
       "#69 Safe Schools Holiday Programme"
     );
     must(
+      /^Safe Schools Holiday Programme$/,
+      "2026-06-29",
+      "2026-07-18",
+      "#157 Safe Schools Holiday Programme"
+    );
+    must(
+      /^Safe Schools Holiday Programme$/,
+      "2026-09-25",
+      "2026-10-03",
+      "#227 Safe Schools Holiday Programme"
+    );
+    must(
+      /^Safe Schools Holiday Programme$/,
+      "2026-12-10",
+      "2026-12-16",
+      "#289 Safe Schools Holiday Programme"
+    );
+    must(
+      /^Safe Schools' Back to School Drive$/,
+      "2026-02-02",
+      "2026-02-07",
+      "#63 Safe Schools Back to School Drive"
+    );
+    must(
+      /^MOOT Court [–—−-] workshop on essay writing \(virtual\)$/,
+      "2026-04-20",
+      "2026-04-21",
+      "#151 MOOT Court essay workshop"
+    );
+    must(
+      /^YCAP [–—−-] provincial workshop \(virtual\)$/,
+      "2026-05-15",
+      "2026-05-16",
+      "#154 YCAP provincial workshop"
+    );
+    must(
+      /^SASCE [–—−-] provincial round$/,
+      "2026-05-28",
+      "2026-06-01",
+      "#156 SASCE provincial round"
+    );
+    must(
+      /^SASCE [–—−-] national championship$/,
+      "2026-06-30",
+      "2026-07-04",
+      "#158 SASCE national championship"
+    );
+    must(
+      /^YCAP [–—−-] provincial workshop \(virtual\)$/,
+      "2026-08-14",
+      "2026-08-15",
+      "#221 YCAP provincial workshop"
+    );
+    must(
+      /^National Schools MOOT Court Competition [–—−-] provincial oral round$/,
+      "2026-08-29",
+      "2026-08-30",
+      "#225 MOOT Court provincial oral round"
+    );
+    must(
+      /^YCAP [–—−-] provincial competition$/,
+      "2026-09-05",
+      "2026-09-06",
+      "#226 YCAP provincial competition"
+    );
+    must(
       /^National Schools MOOT Court \(Grades 9[–—−-]10\) [–—−-] registration$/,
       "2026-04-17",
       "2026-04-18",
@@ -896,6 +962,102 @@ describe("parseSource", () => {
     assert.match(systemic!.start, /^2026-10-13/);
     assert.match(systemic!.end, /^2026-10-29/);
     assert.doesNotMatch(systemic!.start, /^2026-10-12/);
+
+    // Batch-5: holiday programmes / enrichment stages follow their own due-date cells
+    const moved157 = extract.replace(
+      /(157\.\s+Safe\s+Schools\s+Holiday\s+Programme\s+)29 June to 17 July 2026/,
+      "$130 June to 18 July 2026"
+    );
+    assert.match(moved157, /157\.[\s\S]*?30 June to 18 July 2026/);
+    const events157 = parseWesternCapePlanningPdf(moved157);
+    const hp157 = events157.find(
+      (e) =>
+        e.summary === "Safe Schools Holiday Programme" &&
+        e.start.startsWith("2026-06-30")
+    );
+    assert.ok(hp157, "#157 must follow moved June/July cell");
+    assert.match(hp157!.end, /^2026-07-19/);
+    // #69 must NOT become #157’s dates when #157 moves
+    const hp69still = events157.find(
+      (e) =>
+        e.summary === "Safe Schools Holiday Programme" &&
+        e.start.startsWith("2026-03-30")
+    );
+    assert.ok(hp69still, "#69 must stay 30 Mar–2 Apr when #157 dates move");
+    assert.match(hp69still!.end, /^2026-04-03/);
+    assert.ok(
+      !events157.some(
+        (e) =>
+          e.summary === "Safe Schools Holiday Programme" &&
+          e.start.startsWith("2026-06-29")
+      ),
+      "#69 must not keep old #157 span after #157 cell moves"
+    );
+
+    const moved227 = extract.replace(
+      /(227\.\s+Safe\s+Schools\s+Holiday\s+Programme[\s\S]*?)25 September to\s+02 October 2026/,
+      "$126 September to 03 October 2026"
+    );
+    assert.match(moved227, /227\.[\s\S]*?26 September to 03 October 2026/);
+    const events227 = parseWesternCapePlanningPdf(moved227);
+    const hp227 = events227.find(
+      (e) =>
+        e.summary === "Safe Schools Holiday Programme" &&
+        e.start.startsWith("2026-09-26")
+    );
+    assert.ok(hp227, "#227 must follow moved Sep/Oct cell");
+    assert.match(hp227!.end, /^2026-10-04/);
+  });
+
+  it("Safe Schools Holiday Programme rows keep distinct due-date spans", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    const extract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const events = parseWesternCapePlanningPdf(extract);
+    const programmes = events.filter(
+      (e) => e.summary === "Safe Schools Holiday Programme"
+    );
+    assert.equal(
+      programmes.length,
+      4,
+      `expected 4 holiday programmes (#69/#157/#227/#289), got ${programmes.length}`
+    );
+    const spans = programmes
+      .map((e) => `${e.start.slice(0, 10)}..${e.end.slice(0, 10)}`)
+      .sort();
+    assert.deepEqual(spans, [
+      "2026-03-30..2026-04-03",
+      "2026-06-29..2026-07-18",
+      "2026-09-25..2026-10-03",
+      "2026-12-10..2026-12-16",
+    ]);
+
+    // Fail if #69 collapses into #157’s dates
+    const row69 = programmes.find((e) => e.start.startsWith("2026-03-30"));
+    assert.ok(row69);
+    assert.doesNotMatch(row69!.start, /^2026-06-29/);
+    assert.doesNotMatch(row69!.end, /^2026-07-18/);
+
+    // #227 PDF cell is 25 Sep–2 Oct — not Term 4 header (06 Oct–11 Dec)
+    const row227 = programmes.find((e) => e.start.startsWith("2026-09-25"));
+    assert.ok(row227, "#227 must emit 25 Sep start");
+    assert.match(row227!.end, /^2026-10-03/);
+    assert.doesNotMatch(row227!.start, /^2026-10-06/);
+    assert.doesNotMatch(row227!.end, /^2026-12-12/);
+
+    // Neighbour #158 must not steal #157’s holiday span
+    const sasceNational = events.find(
+      (e) => e.summary === "SASCE – national championship"
+    );
+    assert.ok(sasceNational);
+    assert.match(sasceNational!.start, /^2026-06-30/);
+    assert.match(sasceNational!.end, /^2026-07-04/);
+    assert.doesNotMatch(sasceNational!.start, /^2026-06-29/);
   });
 
   it("item #42 due date stays 27 Jan when 29 Jan sits before 43. in the extract", async () => {
