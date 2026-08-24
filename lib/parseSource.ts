@@ -996,6 +996,19 @@ const WC_PLANNING_PARENT_ROWS: Array<{
       "Closing date for parents dissatisfied with the outcome of their progression/promotion appeals, to appeal to district directors",
   },
   {
+    item: 41,
+    titleRe:
+      /Submit\s+assessment\s+accommodation\s+appeals\s+for\s+Grade\s+12/i,
+    summary: "Submit assessment accommodation appeals for Grade 12",
+  },
+  {
+    item: 47,
+    titleRe:
+      /All\s+appeals\s+\(for\s+progression\s+and\s+promotion\s+results\s+for\s+Grades\s+1[–—−-]11\s+of\s+2025\)\s+finalised/i,
+    summary:
+      "All appeals (for progression and promotion results for Grades 1–11 of 2025) finalised",
+  },
+  {
     item: 58,
     titleRe:
       /Grade\s+11\s+subject\s+change\s+applications\s+by\s+parents/i,
@@ -1008,11 +1021,28 @@ const WC_PLANNING_PARENT_ROWS: Array<{
     summary: "Grade 10 subject change applications by parents",
   },
   {
+    item: 267,
+    titleRe:
+      /Applications\s+for\s+assessment\s+accommodations\s+for\s+Grades\s+R[–—−-]11\s+close/i,
+    summary: "Applications for assessment accommodations for Grades R–11 close",
+  },
+  {
+    item: 271,
+    titleRe:
+      /Submit\s+assessment\s+accommodations\s+appeals\s+for\s+Grades\s+10[–—−-]11/i,
+    summary: "Submit assessment accommodations appeals for Grades 10–11",
+  },
+  {
     item: 280,
     titleRe:
       /Subject\s+change\s+applications\s+by\s+parents\s+of\s+Grade\s+11\s+learners/i,
     summary:
       "Subject change applications by parents of Grade 11 learners – for Grade 12 year",
+  },
+  {
+    item: 286,
+    titleRe: /Appeals\s+for\s+Grades\s+10[–—−-]11/i,
+    summary: "Appeals for Grades 10–11",
   },
 ];
 
