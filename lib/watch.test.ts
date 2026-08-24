@@ -98,11 +98,13 @@ describe("homepage examples and copy", () => {
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
-    // Extra / $5 label wiring remains for a future proven tile — none ship today
+    // Extra / $5 label wiring — Ridgewood ships; Stithians stays omitted
     assert.match(
       page,
       /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
     );
+    assert.match(page, /Ridgewood College terms 2026/);
+    assert.match(page, /ridgewoodcollege\.co\.za\/term-dates\//);
     // Stithians PDF is not the calendar a parent would read yet — tile omitted
     assert.doesNotMatch(page, /School calendar \(St /);
     assert.doesNotMatch(
@@ -1667,6 +1669,51 @@ describe("parseSource", () => {
       1,
       "reg closing deduped"
     );
+  });
+
+  it("Ridgewood term-dates fixture: Term N YYYY spans match page START/CLOSE periods", async () => {
+    const { parseSourceText, looksLikeTermStartCloseCalendar } = await import(
+      "./parseSource"
+    );
+    const extract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/ridgewood-term-dates-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    assert.ok(
+      looksLikeTermStartCloseCalendar(extract),
+      "fixture must look like START:/CLOSE: term calendar"
+    );
+    const { events, title } = parseSourceText(extract, new Date("2026-08-24"), {
+      sourceTitle: "Term Dates – Ridgewood College",
+      sourceUrl: "https://ridgewoodcollege.co.za/term-dates/",
+    });
+    assert.match(title, /Ridgewood|Term Dates/i);
+    // Exact periods from live page START:/CLOSE: with years — not half-term crumbs
+    function mustSpan(summary: string, startYmd: string, endExclusiveYmd: string) {
+      const hit = events.find(
+        (e) =>
+          e.summary === summary &&
+          e.start.startsWith(startYmd) &&
+          e.end.startsWith(endExclusiveYmd)
+      );
+      assert.ok(
+        hit,
+        `missing ${summary} ${startYmd}→${endExclusiveYmd}; got ${events
+          .map((e) => `${e.summary}|${e.start.slice(0, 10)}→${e.end.slice(0, 10)}`)
+          .join("; ")}`
+      );
+    }
+    assert.equal(events.length, 3, "only three year-stamped term spans");
+    mustSpan("Term 1 2026", "2026-01-14", "2026-04-11");
+    mustSpan("Term 2 2026", "2026-05-06", "2026-08-08");
+    mustSpan("Term 3 2026", "2026-09-09", "2026-12-05");
+    // Yearless half-term CLOSE / RETURN / holidays — not invented
+    assert.ok(!events.some((e) => /half\s*term|return|holiday|easter/i.test(e.summary)));
+    assert.ok(!events.some((e) => e.start.startsWith("2026-02-19")));
+    assert.ok(!events.some((e) => /^START:/i.test(e.summary)));
   });
 
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {

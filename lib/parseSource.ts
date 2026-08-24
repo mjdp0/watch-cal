@@ -1758,6 +1758,77 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
 }
 
 /**
+ * Independent-school term pages with year-stamped START:/CLOSE: under Term N
+ * (e.g. Ridgewood College). Emit Term N YYYY spans only. Half-term CLOSE lines
+ * without a year are skipped — do not invent days or holiday periods.
+ */
+export function looksLikeTermStartCloseCalendar(text: string): boolean {
+  return (
+    /\bTerm\s+[1234]\s*\(/i.test(text) &&
+    /\bSTART:\s*[^\n]*\b20\d{2}\b/i.test(text) &&
+    /\bCLOSE:\s*[^\n]*\b20\d{2}\b/i.test(text)
+  );
+}
+
+function ymdOnLine(line: string): Date | null {
+  const m = line.match(
+    new RegExp(
+      String.raw`(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+      "i"
+    )
+  );
+  if (!m) return null;
+  const month = MONTHS[m[2].toLowerCase()];
+  if (month == null) return null;
+  return parseDateParts(Number(m[1]), month, Number(m[3]));
+}
+
+export function parseTermStartCloseCalendar(
+  text: string
+): { title: string; events: ParsedEvent[] } {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  const events: ParsedEvent[] = [];
+  let termN: number | null = null;
+  let start: Date | null = null;
+
+  for (const line of lines) {
+    const tm = line.match(/^Term\s+([1234])\b/i);
+    if (tm) {
+      termN = Number(tm[1]);
+      start = null;
+      continue;
+    }
+    if (termN == null) continue;
+    if (/^START:/i.test(line)) {
+      const d = ymdOnLine(line);
+      if (d) start = d;
+      continue;
+    }
+    if (/^CLOSE:/i.test(line) && start) {
+      const d = ymdOnLine(line);
+      // Yearless half-term CLOSE — keep waiting for the term CLOSE with a year.
+      if (!d) continue;
+      const y = start.getFullYear();
+      events.push(
+        allDaySpan(`Term ${termN} ${y}`, `${line}`, start, d)
+      );
+      start = null;
+      termN = null;
+    }
+  }
+
+  const titleLine =
+    lines.find((l) => /term dates/i.test(l)) || "Term dates";
+  return {
+    title: titleLine.replace(/&#8211;/g, "–").slice(0, 120),
+    events,
+  };
+}
+
+/**
  * Conservative dated-event extractor for HTML/PDF plain text.
  * Year is required on the line, or inherited only for written date ranges and
  * holiday lines when a document-level year is known (title, filename, or a
@@ -1766,6 +1837,7 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
  *
  * Western Cape school-calendar HTML is a special case: terms become year-titled
  * SPANS (not yearless open/close dots); holidays keep the year in the name.
+ * Independent START:/CLOSE: term pages (year-stamped) also become Term N spans.
  */
 export function parseSourceText(
   text: string,
@@ -1783,6 +1855,10 @@ export function parseSourceText(
     if (looksLikeWesternCapeSchoolCalendar(cleaned)) {
       return parseWesternCapeSchoolCalendarHtml(cleaned);
     }
+  }
+
+  if (looksLikeTermStartCloseCalendar(cleaned)) {
+    return parseTermStartCloseCalendar(cleaned);
   }
 
   const inheritYear = inferDocumentYear(cleaned, opts);
