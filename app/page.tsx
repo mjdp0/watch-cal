@@ -22,9 +22,11 @@ const WESTERN_CAPE_FEED_ID =
   "aHR0cHM6Ly93d3cud2VzdGVybmNhcGUuZ292LnphL2VkdWNhdGlvbi9zY2hvb2wtY2FsZW5kYXI";
 
 /**
- * Extra tiles (no feedId) must be proven via POST /api/preview dry-run.
- * Unproven extras are omitted rather than shipped half-baked.
- * Western Cape stays as the only free/live feedId tile.
+ * Only ship example tiles whose feed matches what a parent would read on the
+ * source. Western Cape live feed is term open/close (+ some holidays) — not
+ * the full page (no Grade 12 / NSC / June exam blocks, no Planning Calendar).
+ * Extra PDF tiles stay omitted until titles match the source, not crumbs.
+ * Extra tiles (no feedId) must preview via POST /api/preview — never auto-mint.
  */
 const EXAMPLES: {
   label: string;
@@ -32,13 +34,9 @@ const EXAMPLES: {
   feedId?: string;
 }[] = [
   {
-    label: "School terms (Western Cape)",
+    label: "Western Cape term open/close (partial)",
     url: "https://www.westerncape.gov.za/education/school-calendar",
     feedId: WESTERN_CAPE_FEED_ID,
-  },
-  {
-    label: "School calendar (St Stithians)",
-    url: "https://www.stithian.com/uploads/files/St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf",
   },
 ];
 
@@ -215,7 +213,7 @@ export default function HomePage() {
           setNeedsExtraWatch(true);
           setError(
             data.message ||
-              "This URL needs a pay-once extra watch. One free watch is already on this instance."
+              "First calendar free. Another school is $5 once."
           );
           if (data.payload?.checkout_message) {
             setCheckoutHint(data.payload.checkout_message);
@@ -301,7 +299,7 @@ export default function HomePage() {
         return;
       }
       setPreview(data.payload);
-      // Extra dry-run succeeded — offer the real pay-once path (no mint yet).
+      // Extra preview succeeded — offer pay-once path (no mint yet).
       setNeedsExtraWatch(true);
     } catch {
       setPreviewError("Could not preview URL");
@@ -312,8 +310,8 @@ export default function HomePage() {
 
   function useExample(example: (typeof EXAMPLES)[number]) {
     setUrl(example.url);
-    // Free/live Western Cape may create a watch. Extra examples dry-run
-    // via /api/preview — never POST /api/watches (would 402 / mint).
+    // Partial WC feed may create a watch. Extra examples preview via
+    // /api/preview — never POST /api/watches (would 402 / mint).
     if (example.feedId) {
       setPreview(null);
       setPreviewError(null);
@@ -403,7 +401,7 @@ export default function HomePage() {
                 </button>
                 {feedLinks && (
                   <p className="example-feed">
-                    Already live:{" "}
+                    Add to phone:{" "}
                     <a href={feedLinks.webcal_url}>webcal</a>
                     {" · "}
                     <a href={feedLinks.https_url}>https .ics</a>
@@ -419,21 +417,20 @@ export default function HomePage() {
 
       {(previewBusy || preview || previewError) && (
         <section className="preview" aria-live="polite">
-          <h2>Dry-run preview</h2>
-          {previewBusy && <p className="meta">Parsing… no watch created</p>}
+          <h2>Preview</h2>
+          {previewBusy && <p className="meta">Checking dates… not subscribed yet</p>}
           {previewError && <p className="error">{previewError}</p>}
           {preview && (
             <p className="meta">
               {preview.title} · {preview.event_count} event
-              {preview.event_count === 1 ? "" : "s"} · not watched (quota
-              untouched)
+              {preview.event_count === 1 ? "" : "s"} · not subscribed yet
             </p>
           )}
           {preview && (
             <div className="pay-once preview-checkout">
               <p>
-                First watch stays free. This extra calendar is $5 one-time —
-                pay once, then tap Create watch to subscribe.
+                First calendar free. Another school is $5 once — then tap Create
+                watch to subscribe.
               </p>
               <button
                 type="button"
@@ -442,7 +439,7 @@ export default function HomePage() {
               >
                 {checkoutBusy
                   ? "Opening checkout…"
-                  : "Pay once for one extra watch"}
+                  : "Pay $5 once for another school"}
               </button>
               {checkoutHint && <p className="error">{checkoutHint}</p>}
             </div>
@@ -452,16 +449,13 @@ export default function HomePage() {
 
       {needsExtraWatch && !preview && (
         <div className="pay-once">
-          <p>
-            One free watch is already on this instance. Pay once for one extra
-            watched URL — not a recurring plan.
-          </p>
+          <p>First calendar free. Another school is $5 once.</p>
           <button
             type="button"
             onClick={startExtraWatchCheckout}
             disabled={checkoutBusy}
           >
-            {checkoutBusy ? "Opening checkout…" : "Pay once for one extra watch"}
+            {checkoutBusy ? "Opening checkout…" : "Pay $5 once for another school"}
           </button>
           {checkoutHint && <p className="error">{checkoutHint}</p>}
         </div>
@@ -507,7 +501,7 @@ export default function HomePage() {
           </div>
           <p className="meta">
             {watch.title} · {watch.event_count} event
-            {watch.event_count === 1 ? "" : "s"} · id {watch.id}
+            {watch.event_count === 1 ? "" : "s"}
           </p>
           <p className="meta freshness">
             {parentRelativeTime(watch.last_fetched_at, "checked")}
@@ -518,8 +512,7 @@ export default function HomePage() {
       )}
 
       <p className="note">
-        First watch is free. Extra watches are pay-once Polar ($5), one credit
-        per URL — not billed SaaS.
+        First calendar free. Another school is $5 once.
       </p>
     </main>
   );

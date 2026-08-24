@@ -61,7 +61,7 @@ describe("assertPublicHttpUrl", () => {
 });
 
 describe("homepage examples and copy", () => {
-  it("extra examples dry-run via /api/preview; free example may create a watch", async () => {
+  it("extra examples preview via /api/preview; free example may create a watch", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
@@ -74,7 +74,7 @@ describe("homepage examples and copy", () => {
     // Extra tiles must not POST /api/watches — that 402 + existing feed looked like a parse fail
     assert.match(
       page,
-      /never POST \/api\/watches|Extra examples dry-run/i
+      /never POST \/api\/watches|Extra examples preview/i
     );
     // 402 must not hydrate the free watch under the new URL
     assert.doesNotMatch(
@@ -85,32 +85,42 @@ describe("homepage examples and copy", () => {
       page,
       /Do not hydrate the free watch|looks like a failed parse/
     );
-    // 402 error must name pay-once extra watch, not parse failure
-    assert.match(page, /This URL needs a pay-once extra watch/);
+    // 402 error must use parent pay-once words, not engineer jargon
+    assert.match(page, /First calendar free\. Another school is \$5 once/);
     assert.match(
       page,
       /if \(res\.status === 402 \|\| res\.status === 403\) \{\s*setNeedsExtraWatch\(true\);\s*setError\(/
     );
   });
 
-  it("extra example tiles show Extra / $5 (no feedId); only proven extras ship", async () => {
+  it("WC tile is partial term open/close only; St Stithians Extra stays hidden", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
+    // Extra / $5 label wiring remains for a future proven tile — none ship today
     assert.match(
       page,
       /!example\.feedId && \(\s*<span className="example-extra"> Extra \/ \$5<\/span>/
     );
-    assert.match(page, /St Stithians/);
-    // NSC was never proven via Node fetch — omitted rather than half-baked
+    // Stithians PDF is not the calendar a parent would read yet — tile omitted
+    assert.doesNotMatch(page, /School calendar \(St /);
+    assert.doesNotMatch(
+      page,
+      /stithian\.com\/uploads\/files\/St_Stithians_College_Calendar_2026/
+    );
+    // NSC was never proven — omitted rather than half-baked
     assert.doesNotMatch(page, /NSC exams/);
     assert.doesNotMatch(
       page,
       /url:\s*"https:\/\/www\.education\.gov\.za/
     );
-    // Free Western Cape tile keeps feedId — not labeled Extra / $5 in the EXAMPLES entry
+    assert.doesNotMatch(page, /wikipedia\.org/i);
+    // Free Western Cape tile keeps feedId — labelled partial, not "the calendar"
     assert.match(page, /feedId: WESTERN_CAPE_FEED_ID/);
+    assert.match(page, /Western Cape term open\/close \(partial\)/);
+    assert.doesNotMatch(page, /Western Cape calendar/i);
+    assert.doesNotMatch(page, /School calendar \(Western Cape\)/i);
   });
 
   it("copy invites a public https link; dates land in the phone calendar", async () => {
@@ -141,22 +151,40 @@ describe("homepage examples and copy", () => {
     assert.doesNotMatch(page, /type=["']file["']/);
   });
 
-  it("after extra preview, shows Polar pay-once checkout CTA (no dead-end)", async () => {
+  it("Add to phone keeps webcal/https hrefs; footer is parent $5 once (not Polar SaaS)", async () => {
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.match(page, /Add to phone:/);
+    assert.match(page, /href=\{feedLinks\.webcal_url\}/);
+    assert.match(page, /href=\{feedLinks\.https_url\}/);
+    assert.doesNotMatch(page, /Already live:/);
+    assert.match(page, /First calendar free\. Another school is \$5 once\./);
+    assert.doesNotMatch(page, /billed SaaS|pay-once Polar/i);
+    assert.doesNotMatch(page, /Dry-run preview|quota untouched|this instance/i);
+    assert.doesNotMatch(page, /· id \{watch\.id\}/);
+  });
+
+  it("after extra preview, shows pay-once checkout CTA (no dead-end)", async () => {
     const page = await readFile(
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
     assert.match(page, /setPreview\(data\.payload\)/);
     assert.match(page, /setNeedsExtraWatch\(true\)/);
-    assert.match(page, /preview-checkout|preview && \([\s\S]*Pay once for one extra watch/);
-    assert.match(page, /First watch stays free/);
-    assert.match(page, /\$5 one-time/);
+    assert.match(
+      page,
+      /preview-checkout|preview && \([\s\S]*Pay \$5 once for another school/
+    );
+    assert.match(page, /First calendar free/);
+    assert.match(page, /\$5 once/);
     assert.match(page, /startExtraWatchCheckout/);
     assert.match(page, /\/api\/polar\/checkout/);
     // Preview path must not mint a watch
     assert.match(
       page,
-      /never POST \/api\/watches|Extra examples dry-run/i
+      /never POST \/api\/watches|Extra examples preview/i
     );
   });
 
@@ -442,6 +470,63 @@ describe("parseSource", () => {
     assert.match(nye!.start, /^2026-01-01/);
     assert.ok(events.some((e) => /Human Rights/i.test(e.summary)));
     assert.ok(events.some((e) => /Good Friday/i.test(e.summary)));
+  });
+
+  it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {
+    // Recorded pdf-parse extract of
+    // St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf — not a live fetch.
+    const extract = await readFile(
+      path.join(process.cwd(), "lib/fixtures/st-stithians-2026-extract.txt"),
+      "utf8"
+    );
+    assert.match(extract, /Term Commences Wednesday 14 January/);
+    assert.match(extract, /School Closes for the Holidays/);
+    assert.match(extract, /Half Term/);
+
+    const { events } = parseSourceText(extract, new Date("2026-08-24T00:00:00Z"), {
+      sourceTitle: "St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf",
+      sourceUrl:
+        "https://www.stithian.com/uploads/files/St_Stithians_College_Calendar_2026_-_Approved_March_2025.pdf",
+    });
+
+    // Honesty: emit source labels, not weekday-only crumbs. This is still an
+    // incomplete reshape of the PDF (term/holiday column ranges, multi-day
+    // festivals, half-term spans, staff notes) — not shippable as Extra.
+    for (const e of events) {
+      assert.doesNotMatch(
+        e.summary,
+        /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)$/i,
+        `weekday crumb: ${e.summary}`
+      );
+      assert.doesNotMatch(
+        e.summary,
+        /^TERM\s*\d*\s*(May|January|April|August|September)?$/i,
+        `term-header crumb: ${e.summary}`
+      );
+    }
+    assert.ok(
+      events.some((e) => e.summary === "Term Commences"),
+      "PDF wording Term Commences kept when present"
+    );
+    assert.ok(
+      events.some((e) => /School Closes for the Holidays/i.test(e.summary)),
+      "PDF wording School Closes kept when present"
+    );
+    assert.ok(
+      events.some((e) => /^Half Term$/i.test(e.summary)),
+      "PDF wording Half Term kept when present"
+    );
+
+    // Tile must stay hidden — incomplete parse is incomplete (count is not progress)
+    const page = await readFile(
+      path.join(process.cwd(), "app/page.tsx"),
+      "utf8"
+    );
+    assert.doesNotMatch(
+      page,
+      /stithian\.com\/uploads\/files\/St_Stithians_College_Calendar_2026/
+    );
+    assert.doesNotMatch(page, /School calendar \(St /);
   });
 });
 

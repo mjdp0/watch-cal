@@ -289,6 +289,35 @@ function findDates(text: string, inheritYear: number | null): DateHit[] {
         raw: hm[0],
       });
     }
+
+    // School PDF style: "Term Commences Wednesday 14 January" /
+    // "Half Term Thursday 19 February" — weekday + day + month, document year.
+    // Require a non-weekday label before the weekday on the same line (or a
+    // trailing label) so bare weekday crumbs are not invented as events.
+    const weekdayDateRe = new RegExp(
+      String.raw`\b(?:${WEEKDAY_ALT})\s+(\d{1,2})(?:st|nd|rd|th)?\s+(${MONTH_ALT})(?!\s+((?:19|20)\d{2})\b)`,
+      "gi"
+    );
+    let wm: RegExpExecArray | null;
+    while ((wm = weekdayDateRe.exec(text)) !== null) {
+      if (isOutlineNumbering(text, wm.index)) continue;
+      const end = wm.index + wm[0].length;
+      if (overlapsExisting(hits, wm.index, end)) continue;
+      const lineStart = text.lastIndexOf("\n", wm.index) + 1;
+      const before = text.slice(lineStart, wm.index).replace(/\s+/g, " ").trim();
+      const beforeClean = stripTrailingWeekday(before);
+      if (beforeClean.length < 3 && !hasTrailingLabel(text, end)) continue;
+      const month = MONTHS[wm[2].toLowerCase()];
+      if (month == null) continue;
+      const date = parseDateParts(Number(wm[1]), month, inheritYear);
+      if (!date) continue;
+      hits.push({
+        index: wm.index,
+        end,
+        date,
+        raw: wm[0],
+      });
+    }
   }
 
   hits.sort((a, b) => a.index - b.index);
@@ -326,13 +355,66 @@ const TERM_ORDINAL: Record<string, number> = {
   four: 4,
 };
 
-/** Bare Opens/Closes or footnote leftovers — never usable as SUMMARY. */
+const WEEKDAY_ALT =
+  "Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday";
+
+const WEEKDAY_ONLY =
+  /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i;
+
+/** Remove a weekday glued before a date — not weekdays inside names (Good Friday). */
+function stripTrailingWeekday(s: string): string {
+  return s
+    .replace(new RegExp(String.raw`\b(?:${WEEKDAY_ALT})\s*$`, "i"), "")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,;:\-\u2013\u2014–—]+|[\s,;:\-\u2013\u2014–—]+$/gu, "")
+    .trim();
+}
+
+/** Bare Opens/Closes, weekday crumbs, or footnote leftovers — never SUMMARY. */
 function isJunkSummary(s: string): boolean {
   const t = s.trim();
+  if (!t) return true;
   if (/^(opens|closes)$/i.test(t)) return true;
   // "(2)", "(1) | 14 January 2026 (2)", leftover pipe/footnote fragments
   if (/^\(\d+\)/.test(t)) return true;
   if (/^\(\d+\)\s*\|/.test(t)) return true;
+  if (WEEKDAY_ONLY.test(t)) return true;
+  // Table header crumbs: "TERM 2 May", "HOLIDAYS Dec"
+  if (
+    /^(terms?\s*\d+|holidays?|school\s*holidays?)\s+(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\b/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  // Bare section headers used as titles
+  if (/^(terms?\s*\d+|holidays?|school\s*holidays?|hol\s*'?s)$/i.test(t)) {
+    return true;
+  }
+  // Chopped multi-weekday / date-list fragments from festival rows
+  const weekdayHits = t.match(new RegExp(String.raw`\b(?:${WEEKDAY_ALT})\b`, "gi"));
+  if (weekdayHits && weekdayHits.length >= 2) return true;
+  if (
+    /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+\d{1,2}\b/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  // Time / punctuation crumbs left after stripping a date
+  if (/^[,;:\-–—/\s\d&)]+$/.test(t)) return true;
+  if (/^\d{1,2}(,\s*\d{1,2})+(\s*(and|&)\s*\d{1,2})?/i.test(t)) return true;
+  if (/,\s*\d{1,2}:\d{2}\b/.test(t) && !/half\s*terms?/i.test(t)) return true;
+  // Audience / note parentheses alone — not an event title (ok as a join piece)
+  if (/^\([^)]*\)\s*$/.test(t)) return true;
+  if (/^term$/i.test(t)) return true;
+  if (/\band\s*$/i.test(t)) return true;
+  if (/\(\s*normal opening\b/i.test(t)) return true;
+  if (/^\d{1,2},\s*/.test(t)) return true;
+  // Truncated "Public Holiday: Good" after bad weekday strip (should not recur)
+  if (/^public holidays?:\s*(good|easter|family|workers'?|freedom|human)?\s*$/i.test(t)) {
+    return true;
+  }
   return false;
 }
 
@@ -400,52 +482,125 @@ function termBoundSummary(text: string, hit: DateHit): string | null {
 }
 
 /**
+ * When the date sits on a weekday-only / empty line (common PDF table extract),
+ * pull the nearest preceding event label — including a parenthetical audience
+ * line like "(Prep Students)". Uses source words; does not invent Term N.
+ */
+function precedingEventLabel(text: string, hit: DateHit): string | null {
+  const lineStart = text.lastIndexOf("\n", hit.index) + 1;
+  const before = text.slice(0, lineStart);
+  const prev = before
+    .split(/\r?\n/)
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l) => l && !isChromeLine(l));
+  const picked: string[] = [];
+  for (let i = prev.length - 1; i >= Math.max(0, prev.length - 6); i--) {
+    const t = prev[i];
+    if (/^\d{1,3}$/.test(t)) continue;
+    if (/^[–—−-]$/.test(t)) continue;
+    if (WEEKDAY_ONLY.test(t)) continue;
+    // Parenthetical audience joins with the prior label — not junk by itself here
+    if (/^\([^)]+\)$/.test(t)) {
+      picked.unshift(t);
+      continue;
+    }
+    if (isJunkSummary(t)) continue;
+    // Skip pure month tokens from fragmented PDF columns
+    if (MONTHS[t.toLowerCase()] != null) continue;
+    if (/^\(?\d{2,4}\)?$/.test(t)) continue;
+    picked.unshift(t);
+    break;
+  }
+  if (!picked.length) return null;
+  const joined = picked.join(" ").replace(/\s+/g, " ").trim();
+  const cleaned = stripTrailingWeekday(joined);
+  if (!cleaned || isJunkSummary(cleaned)) return null;
+  return cleaned.slice(0, 120);
+}
+
+function finalizeSummary(raw: string | null): string | null {
+  if (!raw) return null;
+  // Do not strip weekdays here — "Good Friday" / "Easter Sunday" are titles.
+  const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!cleaned || isJunkSummary(cleaned)) return null;
+  return cleaned;
+}
+
+/**
  * Build SUMMARY from the line containing the date (or nearest non-chrome line).
  * Returns null when nothing usable exists — caller drops the hit.
+ * Prefer source row labels; never keep bare weekdays or table-header crumbs.
  */
 function lineSummary(text: string, hit: DateHit): string | null {
   const lineStart = text.lastIndexOf("\n", hit.index) + 1;
   const lineEndIdx = text.indexOf("\n", hit.end);
   const lineEnd = lineEndIdx === -1 ? text.length : lineEndIdx;
-  let line = text.slice(lineStart, lineEnd).replace(/\s+/g, " ").trim();
+  const line = text.slice(lineStart, lineEnd).replace(/\s+/g, " ").trim();
 
   // Term open/close rows: resolve before afterDate (which otherwise grabs "(2)").
   if (/^(opens|closes)\b/i.test(line)) {
     return termBoundSummary(text, hit);
   }
 
+  // Range rows: keep written spans (DBE-style). Drop TERM/HOLIDAYS column
+  // cells whose only neighbour is a section header (not the PDF a parent reads).
+  if (hit.endDate) {
+    const fromPrev = precedingEventLabel(text, hit);
+    if (
+      fromPrev &&
+      /^(terms?\s*\d+|holidays?|school\s*holidays?|hol\s*'?s)$/i.test(fromPrev)
+    ) {
+      return null;
+    }
+    const beforeRange = stripTrailingWeekday(
+      line.slice(0, Math.max(0, hit.index - lineStart)).replace(/\s+/g, " ")
+    ).trim();
+    const fromBefore = finalizeSummary(beforeRange);
+    if (fromBefore) return fromBefore;
+    if (fromPrev) return fromPrev;
+    const raw = hit.raw.replace(/\s+/g, " ").trim().slice(0, 120);
+    return raw || null;
+  }
+
+  // Same-line label before the date beats afterDate crumbs (", 12:00").
+  // Cut at an earlier weekday+day on multi-date lines ("… Monday 12 and Tuesday 13").
+  const beforeRaw = text.slice(lineStart, hit.index).replace(/\s+/g, " ").trim();
+  const beforeCut = beforeRaw.replace(
+    new RegExp(String.raw`\s+(?:${WEEKDAY_ALT})\s+\d{1,2}\b.*$`, "i"),
+    ""
+  );
+  const beforeDate = stripTrailingWeekday(beforeCut);
+  const fromBeforeDate = finalizeSummary(beforeDate);
+  if (fromBeforeDate) return fromBeforeDate;
+
   // Prefer text after the date on the same line (typical "15 March 2026 Home vs North")
   const afterDate = text
     .slice(hit.end, lineEnd)
     .replace(/^[\s,;:\-\u2013\u2014–—]+/u, "")
     .trim();
-  // Range rows often glue digits after the end date ("27 March1153"); prefer the range raw.
-  if (hit.endDate && (!afterDate || /^\d/.test(afterDate))) {
-    const raw = hit.raw.replace(/\s+/g, " ").trim().slice(0, 120);
-    return isJunkSummary(raw) ? null : raw;
-  }
   if (
     afterDate.length >= 3 &&
     !isChromeLine(afterDate) &&
     !/^\d{2,}/.test(afterDate) &&
     !isJunkSummary(afterDate)
   ) {
-    return afterDate.slice(0, 120);
+    const fromAfter = finalizeSummary(afterDate);
+    if (fromAfter) return fromAfter;
   }
 
-  // Else use the line with the raw date stripped
-  const withoutDate = line
-    .replace(hit.raw, " ")
-    .replace(/\s+/g, " ")
-    .replace(/^[\s,;:\-\u2013\u2014–—]+|[\s,;:\-\u2013\u2014–—]+$/gu, "")
-    .trim();
-  if (
-    withoutDate.length >= 3 &&
-    !isChromeLine(withoutDate) &&
-    !isJunkSummary(withoutDate)
-  ) {
-    return withoutDate.slice(0, 120);
-  }
+  // Else use the line with the raw date stripped; drop a weekday glued to the date only.
+  const withoutDate = stripTrailingWeekday(
+    line
+      .replace(hit.raw, " ")
+      .replace(/\s+/g, " ")
+      .replace(/^[\s,;:\-\u2013\u2014–—]+|[\s,;:\-\u2013\u2014–—]+$/gu, "")
+      .trim()
+  );
+  const withoutDateFinal = finalizeSummary(withoutDate);
+  if (withoutDateFinal) return withoutDateFinal;
+
+  const fromPrev = precedingEventLabel(text, hit);
+  if (fromPrev) return fromPrev;
 
   // Walk nearby non-chrome lines for a title
   const lines = text.split(/\r?\n/);
@@ -461,14 +616,9 @@ function lineSummary(text: string, hit: DateHit): string | null {
   }
   for (const j of [lineIdx - 1, lineIdx + 1, lineIdx - 2, lineIdx + 2]) {
     if (j < 0 || j >= lines.length) continue;
-    const cand = lines[j].trim();
-    if (
-      !isChromeLine(cand) &&
-      cand.length >= 3 &&
-      cand.length <= 120 &&
-      !isJunkSummary(cand)
-    ) {
-      return cand.slice(0, 120);
+    const cand = finalizeSummary(lines[j].trim());
+    if (cand && cand.length >= 3 && cand.length <= 120) {
+      return cand;
     }
   }
   return null;
