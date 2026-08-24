@@ -254,8 +254,8 @@ describe("UI copy is pay-once not monthly", () => {
       path.join(process.cwd(), "app/page.tsx"),
       "utf8"
     );
-    assert.match(page, /Pay \$5 once for another school/i);
-    assert.match(page, /First calendar free\. Another school is \$5 once/);
+    assert.match(page, /Pay \$1 once for another school/i);
+    assert.match(page, /First calendar free\. Another school is \$1 once/);
     assert.doesNotMatch(page, /\bmonthly\b/i);
     assert.doesNotMatch(page, /\bsubscription\b/i);
     assert.doesNotMatch(page, /\bSaaS plan\b/i);
