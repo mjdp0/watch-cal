@@ -580,12 +580,31 @@ describe("parseSource", () => {
       "2026-03-14",
       "Nov NSC full-time reg close"
     );
-    // PDF has month-only "May and June 2026" — span 1 May–30 June (exclusive DTEND 1 Jul)
-    must(
-      /^May\/June NSC and SC examinations$/,
-      "2026-05-01",
-      "2026-07-01",
-      "May/June NSC/SC exams span"
+    // #138 PDF is month-only ("May and June 2026") — must NOT invent 1 May–30 Jun
+    const mayJune = events.filter((e) =>
+      /May\/June NSC and SC examinations/i.test(e.summary)
+    );
+    for (const e of mayJune) {
+      assert.notEqual(
+        e.start.slice(0, 10),
+        "2026-05-01",
+        "May/June must not invent DTSTART 1 May"
+      );
+      assert.notEqual(
+        e.end.slice(0, 10),
+        "2026-07-01",
+        "May/June must not invent DTEND 1 Jul"
+      );
+      assert.ok(
+        /no exact days|month.?only|May and June 2026/i.test(e.summary),
+        "if May/June emits, title must say PDF has no exact days"
+      );
+    }
+    // Dropped (preferred): no calendar span without exact days
+    assert.equal(
+      mayJune.length,
+      0,
+      "May/June NSC/SC exams dropped — PDF has no exact days"
     );
     must(
       /^Grade 12 September trial examinations earliest start date$/,
@@ -606,11 +625,36 @@ describe("parseSource", () => {
       "progression appeal close"
     );
 
-    // Do not dump untitled admin mush
+    // Do not dump untitled admin mush; do not invent absent 102–117
     assert.doesNotMatch(
       events.map((e) => e.summary).join("\n"),
       /Snap Survey|job descriptions|Quality Management System|\bLTSM\b|WCED 043/i
     );
+  });
+
+  it("Western Cape planning parent dates are parsed from the numbered due-date column", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    const extract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    // Same title, moved due date — parser must follow the extract, not a hardcoded day
+    const moved = extract.replace(
+      /(35\.\s+School admissions open for Grades R, 1 and 8[\s\S]*?)10 March 2026/,
+      "$111 March 2026"
+    );
+    assert.match(moved, /35\.[\s\S]*?11 March 2026/);
+    const events = parseWesternCapePlanningPdf(moved);
+    const open = events.find(
+      (e) => e.summary === "School admissions open for Grades R, 1 and 8"
+    );
+    assert.ok(open);
+    assert.match(open!.start, /^2026-03-11/);
+    assert.match(open!.end, /^2026-03-12/);
+    assert.doesNotMatch(open!.start, /^2026-03-10/);
   });
 
   it("St Stithians 2026 PDF fixture: no bare weekday crumbs; still not the PDF a parent reads", async () => {

@@ -881,106 +881,183 @@ export function parseWesternCapeSchoolCalendarHtml(
 }
 
 /**
- * Parent-facing rows from the English planning PDF (PDF wording). Only emit when
- * the activity text is present — never invent dates. Skips CEMIS/sign-off/QMS/LTSM
- * admin mush. Month-only May/June NSC exams → 1 May–30 June (PDF has no exact days).
+ * Parent-facing numbered rows from the English planning PDF (PDF wording).
+ * Dates are read from each row’s due-date column — never hardcoded.
+ * Month-only cells (e.g. #138 “May and June 2026”) are dropped; no invented days.
+ * Skips CEMIS/sign-off/QMS/LTSM admin mush. Does not invent absent items 102–117.
  */
-const WC_PLANNING_PARENT_EVENTS: Array<{
+const WC_PLANNING_PARENT_ROWS: Array<{
+  item: number;
+  /** Must match the activity title for that numbered row. */
+  titleRe: RegExp;
   summary: string;
-  present: RegExp;
-  start: [number, number, number];
-  /** Inclusive last day; omit for single all-day. */
-  end?: [number, number, number];
 }> = [
   {
+    item: 35,
+    titleRe: /School\s+admissions\s+open\s+for\s+Grades\s+R,\s*1\s+and\s+8/i,
     summary: "School admissions open for Grades R, 1 and 8",
-    present: /School\s+admissions\s+open\s+for\s+Grades\s+R,\s*1\s+and\s+8/i,
-    start: [2026, 2, 10],
   },
   {
+    item: 119,
+    titleRe: /School\s+admissions\s+close\s+for\s+Grades\s+R,\s*1\s+and\s+8/i,
     summary: "School admissions close for Grades R, 1 and 8",
-    present: /School\s+admissions\s+close\s+for\s+Grades\s+R,\s*1\s+and\s+8/i,
-    start: [2026, 3, 14],
   },
   {
-    summary: "Parents informed of the outcome of online admission applications",
-    present:
+    item: 124,
+    titleRe:
       /Parents\s+informed\s+of\s+the\s+outcome\s+of\s+online\s+admission\s+applications/i,
-    start: [2026, 4, 28],
-    end: [2026, 5, 10],
+    summary: "Parents informed of the outcome of online admission applications",
   },
   {
-    summary: "Parents confirm acceptance of Grades R, 1 and 8 placements",
-    present:
+    item: 125,
+    titleRe:
       /Parents\s+confirm\s+acceptance\s+of\s+Grades\s+R,\s*1\s+and\s+8\s+placements/i,
-    start: [2026, 4, 28],
-    end: [2026, 5, 15],
+    summary: "Parents confirm acceptance of Grades R, 1 and 8 placements",
   },
   {
+    item: 194,
+    titleRe: /School\s+admissions\s+open\s+for\s+transfer\s+requests/i,
     summary: "School admissions open for transfer requests",
-    present: /School\s+admissions\s+open\s+for\s+transfer\s+requests/i,
-    start: [2026, 7, 3],
   },
   {
+    item: 195,
+    titleRe: /School\s+admissions\s+close\s+for\s+transfer\s+requests/i,
     summary: "School admissions close for transfer requests",
-    present: /School\s+admissions\s+close\s+for\s+transfer\s+requests/i,
-    start: [2026, 7, 17],
   },
   {
-    // PDF: "Parents are informed of the outcome per email/SMS" under transfer requests
+    item: 200,
+    titleRe: /Parents\s+are\s+informed\s+of\s+the\s+outcome\s+per\s+email\/SMS/i,
     summary: "Parents are informed of the outcome per email/SMS",
-    present:
-      /Parents\s+are\s+informed\s+of\s+the\s+outcome\s+per\s+email\/SMS[\s\S]{0,40}?16\s+to\s+18\s+September\s+2026/i,
-    start: [2026, 8, 16],
-    end: [2026, 8, 18],
   },
   {
+    item: 36,
+    titleRe:
+      /Release\s+of\s+the\s+2025\s+National\s+Senior\s+Certificate\s+\(NSC\)\s+examination\s+results/i,
     summary:
       "Release of the 2025 National Senior Certificate (NSC) examination results",
-    present:
-      /Release\s+of\s+the\s+2025\s+National\s+Senior\s+Certificate\s+\(NSC\)\s+examination\s+results/i,
-    start: [2026, 0, 13],
   },
   {
+    item: 42,
+    titleRe:
+      /Closing\s+date\s+for\s+registrations\s+for\s+May\/June\s+2026\s+NSC\/Senior\s+Certificate\s+\(SC\)\s+examinations/i,
     summary:
       "Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations",
-    present:
-      /Closing\s+date\s+for\s+registrations\s+for\s+May\/June\s+2026\s+NSC\/Senior\s+Certificate\s+\(SC\)\s+examinations/i,
-    start: [2026, 0, 27],
   },
   {
+    item: 52,
+    titleRe:
+      /Closing\s+date\s+for\s+registrations\s+for\s+November\s+2026\s+NSC\s+examinations\s+[–—−-]\s*full-time\s+candidates/i,
     summary:
       "Closing date for registrations for November 2026 NSC examinations – full-time candidates",
-    present:
-      /Closing\s+date\s+for\s+registrations\s+for\s+November\s+2026\s+NSC\s+examinations\s+[–—−-]\s*full-time\s+candidates/i,
-    start: [2026, 2, 13],
   },
   {
-    // PDF: "May/June NSC and SC examinations May and June 2026" — no exact days
-    summary: "May/June NSC and SC examinations",
-    present: /May\/June\s+NSC\s+and\s+SC\s+examinations\s+May\s+and\s+June\s+2026/i,
-    start: [2026, 4, 1],
-    end: [2026, 5, 30],
-  },
-  {
-    summary: "Grade 12 September trial examinations earliest start date",
-    present:
+    item: 212,
+    titleRe:
       /Grade\s+12\s+September\s+trial\s+examinations\s+earliest\s+start\s+date/i,
-    start: [2026, 7, 26],
+    summary: "Grade 12 September trial examinations earliest start date",
   },
   {
+    item: 218,
+    titleRe: /Grade\s+12\s+September\s+trial\s+examinations\s+end\s+date/i,
     summary: "Grade 12 September trial examinations end date",
-    present: /Grade\s+12\s+September\s+trial\s+examinations\s+end\s+date/i,
-    start: [2026, 8, 23],
   },
   {
+    item: 38,
+    titleRe:
+      /Closing\s+date\s+for\s+parents\s+to\s+appeal\s+the\s+progression\/promotion\s+results\s+of\s+their\s+children/i,
     summary:
       "Closing date for parents to appeal the progression/promotion results of their children",
-    present:
-      /Closing\s+date\s+for\s+parents\s+to\s+appeal\s+the\s+progression\/promotion\s+results\s+of\s+their\s+children/i,
-    start: [2026, 0, 16],
   },
 ];
+
+/** Slice text for numbered activity `N.` through the next activity / section. */
+function numberedActivityBlock(text: string, item: number): string | null {
+  const startRe = new RegExp(String.raw`(^|\n)\s*${item}\.\s+`, "m");
+  const sm = startRe.exec(text);
+  if (!sm) return null;
+  const start = sm.index + sm[0].length;
+  const rest = text.slice(start);
+  // Next "N. " activity row (not section "3.1.2")
+  const nextAct = /\n\s*\d+\.\s+/.exec(rest);
+  // Section heading "3.1.2 …"
+  const nextSec = /\n\s*\d+\.\d+/.exec(rest);
+  let end = rest.length;
+  if (nextAct) end = Math.min(end, nextAct.index);
+  if (nextSec) end = Math.min(end, nextSec.index);
+  return rest.slice(0, end);
+}
+
+/**
+ * Parse due-date column bounds from an activity block.
+ * Returns null for empty cells, TBC, month-only ("May and June 2026"), etc.
+ */
+function parsePlanningDueDate(
+  block: string
+): { start: Date; end: Date } | null {
+  const flat = block.replace(/\s+/g, " ").trim();
+  if (!flat) return null;
+  if (/to\s+be\s+confirmed|^\s*ongoing\b/i.test(flat) && !/\d{1,2}\s+\w+\s+20\d{2}/i.test(flat)) {
+    return null;
+  }
+
+  // "28 May to 10 June 2026" / "02 February to 23 October 2026"
+  const cross = flat.match(
+    new RegExp(
+      String.raw`(\d{1,2})\s+(${MONTH_ALT})\s*(?:to|[–—−-])\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+      "i"
+    )
+  );
+  if (cross) {
+    const m1 = MONTHS[cross[2].toLowerCase()];
+    const m2 = MONTHS[cross[4].toLowerCase()];
+    const y = Number(cross[5]);
+    if (m1 == null || m2 == null) return null;
+    const start = parseDateParts(Number(cross[1]), m1, y);
+    const end = parseDateParts(Number(cross[3]), m2, y);
+    if (!start || !end) return null;
+    return { start, end };
+  }
+
+  // "16 to 18 September 2026"
+  const sameMonth = flat.match(
+    new RegExp(
+      String.raw`(\d{1,2})\s+to\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+      "i"
+    )
+  );
+  if (sameMonth) {
+    const month = MONTHS[sameMonth[3].toLowerCase()];
+    const y = Number(sameMonth[4]);
+    if (month == null) return null;
+    const start = parseDateParts(Number(sameMonth[1]), month, y);
+    const end = parseDateParts(Number(sameMonth[2]), month, y);
+    if (!start || !end) return null;
+    return { start, end };
+  }
+
+  // Month-only / month-pair with no day — e.g. "May and June 2026", "August 2026"
+  // Do not invent 1st/last-of-month bounds.
+  const hasDayMonthYear =
+    /\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+20\d{2}/i.test(
+      flat
+    );
+  if (!hasDayMonthYear) return null;
+
+  // Single day — last day+month+year in the block (due-date column)
+  const dayRe = new RegExp(
+    String.raw`(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+    "gi"
+  );
+  let last: RegExpExecArray | null = null;
+  let dm: RegExpExecArray | null;
+  while ((dm = dayRe.exec(flat)) !== null) last = dm;
+  if (!last) return null;
+  const month = MONTHS[last[2].toLowerCase()];
+  if (month == null) return null;
+  const day = parseDateParts(Number(last[1]), month, Number(last[3]));
+  if (!day) return null;
+  return { start: day, end: day };
+}
 
 /**
  * English WCED planning PDF: religious observances + curated parent-facing
@@ -1061,19 +1138,14 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
     for (const d of dates) push(name, d);
   }
 
-  // Curated parent-facing admission / NSC rows (must be present in PDF text)
-  const flat = cleaned.replace(/\s+/g, " ");
-  for (const row of WC_PLANNING_PARENT_EVENTS) {
-    if (!row.present.test(cleaned) && !row.present.test(flat)) continue;
-    const [ys, ms, ds] = row.start;
-    const start = parseDateParts(ds, ms, ys);
-    if (!start) continue;
-    let end: Date | undefined;
-    if (row.end) {
-      const [ye, me, de] = row.end;
-      end = parseDateParts(de, me, ye) || undefined;
-    }
-    push(row.summary, start, end);
+  // Curated parent-facing rows: title match + due-date parsed from that numbered row
+  for (const row of WC_PLANNING_PARENT_ROWS) {
+    const block = numberedActivityBlock(cleaned, row.item);
+    if (!block) continue;
+    if (!row.titleRe.test(block.replace(/\s+/g, " "))) continue;
+    const bounds = parsePlanningDueDate(block);
+    if (!bounds) continue; // empty / TBC / month-only — drop, do not invent days
+    push(row.summary, bounds.start, bounds.end);
   }
 
   return events;
