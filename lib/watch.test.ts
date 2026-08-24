@@ -439,10 +439,177 @@ describe("parseSource", () => {
       );
       assert.match(e.start, /^2026-/);
     }
-    // Not the full admin deadline calendar — only titled observances
+    // Not the full admin deadline calendar — only titled observances + parent rows
     assert.doesNotMatch(
       events.map((e) => e.summary).join("\n"),
-      /Snap Survey|job descriptions|CEMIS/i
+      /Snap Survey|job descriptions|CEMIS|QMS|LTSM|sign off/i
+    );
+  });
+
+  it("Western Cape school-calendar URL: HTML terms/holidays + planning parent MUST rows", async () => {
+    const {
+      parseWesternCapePlanningPdf,
+      parseWesternCapeSchoolCalendarHtml,
+      parseSourceText,
+    } = await import("./parseSource");
+    const html = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-school-calendar-extract.txt"
+      ),
+      "utf8"
+    );
+    const planning = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const { events: fromHtml } = parseSourceText(html, new Date("2026-08-24T00:00:00Z"), {
+      sourceTitle: "School Calendar | Western Cape Government",
+      sourceUrl: "https://www.westerncape.gov.za/education/school-calendar",
+    });
+    // Same special-case path (terms as year spans)
+    const { events: htmlDirect } = parseWesternCapeSchoolCalendarHtml(html);
+    assert.equal(fromHtml.length, htmlDirect.length);
+
+    const fromPlan = parseWesternCapePlanningPdf(planning);
+    const events = [...fromHtml, ...fromPlan];
+
+    // Keep term spans + full HTML holidays both years (no 40-cap truncation)
+    assert.ok(events.some((e) => e.summary === "Term 1 2026 (learners)"));
+    assert.ok(events.some((e) => e.summary === "Term 4 2027 (staff)"));
+    assert.ok(events.some((e) => e.summary === "New Year’s Day 2026"));
+    assert.ok(events.some((e) => e.summary === "New Year’s Day 2027"));
+    assert.ok(events.some((e) => e.summary === "Day of Goodwill 2027"));
+    assert.ok(events.some((e) => e.summary === "Public holiday 2027"));
+    const holidays2027 = events.filter(
+      (e) => /2027/.test(e.summary) && !/^Term\s/.test(e.summary)
+    );
+    assert.ok(
+      holidays2027.length >= 14,
+      `2027 holidays truncated? got ${holidays2027.length}`
+    );
+
+    // 14 religious observances from planning PDF
+    const religious = fromPlan.filter((e) =>
+      /(eid|passover|ascension|shavuot|rosh\s*hashana|yom\s*kippur|sukkot|shemini|diwali)/i.test(
+        e.summary
+      )
+    );
+    assert.equal(religious.length, 14, `expected 14 religious, got ${religious.length}`);
+
+    function must(
+      summaryRe: RegExp,
+      startYmd: string,
+      endYmd: string,
+      label: string
+    ) {
+      const hit = events.find(
+        (e) =>
+          summaryRe.test(e.summary) &&
+          e.start.startsWith(startYmd) &&
+          e.end.startsWith(endYmd)
+      );
+      assert.ok(
+        hit,
+        `MUST missing: ${label} SUMMARY~${summaryRe} DTSTART ${startYmd} DTEND ${endYmd}`
+      );
+      return hit!;
+    }
+
+    // Parent-facing MUST rows (PDF wording / dates from English planning fixture)
+    must(
+      /^School admissions open for Grades R, 1 and 8$/,
+      "2026-03-10",
+      "2026-03-11",
+      "admissions open R/1/8"
+    );
+    must(
+      /^School admissions close for Grades R, 1 and 8$/,
+      "2026-04-14",
+      "2026-04-15",
+      "admissions close R/1/8"
+    );
+    must(
+      /^Parents informed of the outcome of online admission applications$/,
+      "2026-05-28",
+      "2026-06-11",
+      "parents informed admissions"
+    );
+    must(
+      /^Parents confirm acceptance of Grades R, 1 and 8 placements$/,
+      "2026-05-28",
+      "2026-06-16",
+      "parents confirm placements"
+    );
+    must(
+      /^School admissions open for transfer requests$/,
+      "2026-08-03",
+      "2026-08-04",
+      "transfer open"
+    );
+    must(
+      /^School admissions close for transfer requests$/,
+      "2026-08-17",
+      "2026-08-18",
+      "transfer close"
+    );
+    must(
+      /^Parents are informed of the outcome per email\/SMS$/,
+      "2026-09-16",
+      "2026-09-19",
+      "parents informed transfers"
+    );
+    must(
+      /^Release of the 2025 National Senior Certificate \(NSC\) examination results$/,
+      "2026-01-13",
+      "2026-01-14",
+      "NSC 2025 results"
+    );
+    must(
+      /^Closing date for registrations for May\/June 2026 NSC\/Senior Certificate \(SC\) examinations$/,
+      "2026-01-27",
+      "2026-01-28",
+      "May/June NSC/SC reg close"
+    );
+    must(
+      /^Closing date for registrations for November 2026 NSC examinations [–—−-] full-time candidates$/,
+      "2026-03-13",
+      "2026-03-14",
+      "Nov NSC full-time reg close"
+    );
+    // PDF has month-only "May and June 2026" — span 1 May–30 June (exclusive DTEND 1 Jul)
+    must(
+      /^May\/June NSC and SC examinations$/,
+      "2026-05-01",
+      "2026-07-01",
+      "May/June NSC/SC exams span"
+    );
+    must(
+      /^Grade 12 September trial examinations earliest start date$/,
+      "2026-08-26",
+      "2026-08-27",
+      "trial earliest start"
+    );
+    must(
+      /^Grade 12 September trial examinations end date$/,
+      "2026-09-23",
+      "2026-09-24",
+      "trial end"
+    );
+    must(
+      /^Closing date for parents to appeal the progression\/promotion results of their children$/,
+      "2026-01-16",
+      "2026-01-17",
+      "progression appeal close"
+    );
+
+    // Do not dump untitled admin mush
+    assert.doesNotMatch(
+      events.map((e) => e.summary).join("\n"),
+      /Snap Survey|job descriptions|Quality Management System|\bLTSM\b|WCED 043/i
     );
   });
 

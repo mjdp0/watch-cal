@@ -881,8 +881,111 @@ export function parseWesternCapeSchoolCalendarHtml(
 }
 
 /**
- * English WCED planning PDF: emit only clearly titled observances / named days
- * from the religious-observances tables. Untitled or admin-deadline mush is dropped.
+ * Parent-facing rows from the English planning PDF (PDF wording). Only emit when
+ * the activity text is present — never invent dates. Skips CEMIS/sign-off/QMS/LTSM
+ * admin mush. Month-only May/June NSC exams → 1 May–30 June (PDF has no exact days).
+ */
+const WC_PLANNING_PARENT_EVENTS: Array<{
+  summary: string;
+  present: RegExp;
+  start: [number, number, number];
+  /** Inclusive last day; omit for single all-day. */
+  end?: [number, number, number];
+}> = [
+  {
+    summary: "School admissions open for Grades R, 1 and 8",
+    present: /School\s+admissions\s+open\s+for\s+Grades\s+R,\s*1\s+and\s+8/i,
+    start: [2026, 2, 10],
+  },
+  {
+    summary: "School admissions close for Grades R, 1 and 8",
+    present: /School\s+admissions\s+close\s+for\s+Grades\s+R,\s*1\s+and\s+8/i,
+    start: [2026, 3, 14],
+  },
+  {
+    summary: "Parents informed of the outcome of online admission applications",
+    present:
+      /Parents\s+informed\s+of\s+the\s+outcome\s+of\s+online\s+admission\s+applications/i,
+    start: [2026, 4, 28],
+    end: [2026, 5, 10],
+  },
+  {
+    summary: "Parents confirm acceptance of Grades R, 1 and 8 placements",
+    present:
+      /Parents\s+confirm\s+acceptance\s+of\s+Grades\s+R,\s*1\s+and\s+8\s+placements/i,
+    start: [2026, 4, 28],
+    end: [2026, 5, 15],
+  },
+  {
+    summary: "School admissions open for transfer requests",
+    present: /School\s+admissions\s+open\s+for\s+transfer\s+requests/i,
+    start: [2026, 7, 3],
+  },
+  {
+    summary: "School admissions close for transfer requests",
+    present: /School\s+admissions\s+close\s+for\s+transfer\s+requests/i,
+    start: [2026, 7, 17],
+  },
+  {
+    // PDF: "Parents are informed of the outcome per email/SMS" under transfer requests
+    summary: "Parents are informed of the outcome per email/SMS",
+    present:
+      /Parents\s+are\s+informed\s+of\s+the\s+outcome\s+per\s+email\/SMS[\s\S]{0,40}?16\s+to\s+18\s+September\s+2026/i,
+    start: [2026, 8, 16],
+    end: [2026, 8, 18],
+  },
+  {
+    summary:
+      "Release of the 2025 National Senior Certificate (NSC) examination results",
+    present:
+      /Release\s+of\s+the\s+2025\s+National\s+Senior\s+Certificate\s+\(NSC\)\s+examination\s+results/i,
+    start: [2026, 0, 13],
+  },
+  {
+    summary:
+      "Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations",
+    present:
+      /Closing\s+date\s+for\s+registrations\s+for\s+May\/June\s+2026\s+NSC\/Senior\s+Certificate\s+\(SC\)\s+examinations/i,
+    start: [2026, 0, 27],
+  },
+  {
+    summary:
+      "Closing date for registrations for November 2026 NSC examinations – full-time candidates",
+    present:
+      /Closing\s+date\s+for\s+registrations\s+for\s+November\s+2026\s+NSC\s+examinations\s+[–—−-]\s*full-time\s+candidates/i,
+    start: [2026, 2, 13],
+  },
+  {
+    // PDF: "May/June NSC and SC examinations May and June 2026" — no exact days
+    summary: "May/June NSC and SC examinations",
+    present: /May\/June\s+NSC\s+and\s+SC\s+examinations\s+May\s+and\s+June\s+2026/i,
+    start: [2026, 4, 1],
+    end: [2026, 5, 30],
+  },
+  {
+    summary: "Grade 12 September trial examinations earliest start date",
+    present:
+      /Grade\s+12\s+September\s+trial\s+examinations\s+earliest\s+start\s+date/i,
+    start: [2026, 7, 26],
+  },
+  {
+    summary: "Grade 12 September trial examinations end date",
+    present: /Grade\s+12\s+September\s+trial\s+examinations\s+end\s+date/i,
+    start: [2026, 8, 23],
+  },
+  {
+    summary:
+      "Closing date for parents to appeal the progression/promotion results of their children",
+    present:
+      /Closing\s+date\s+for\s+parents\s+to\s+appeal\s+the\s+progression\/promotion\s+results\s+of\s+their\s+children/i,
+    start: [2026, 0, 16],
+  },
+];
+
+/**
+ * English WCED planning PDF: religious observances + curated parent-facing
+ * admission/NSC rows (PDF wording). Untitled CEMIS/sign-off/QMS/LTSM admin mush
+ * is dropped. Does not scrape Grade 12 / NSC exam nav URLs.
  */
 export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
   const cleaned = text.replace(/\u00a0/g, " ");
@@ -890,7 +993,7 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
   const seen = new Set<string>();
 
   function push(summary: string, day: Date, endDay?: Date) {
-    const s = summary.replace(/\s+/g, " ").trim().slice(0, 120);
+    const s = summary.replace(/\s+/g, " ").trim().slice(0, 160);
     if (!s || isJunkSummary(s) || WEEKDAY_ONLY.test(s)) return;
     if (/\b(sunset)\b/i.test(s) && !/^sukkot\b/i.test(s)) {
       // keep "Sukkot" without glued "(sunset)" noise when we can
@@ -958,6 +1061,21 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
     for (const d of dates) push(name, d);
   }
 
+  // Curated parent-facing admission / NSC rows (must be present in PDF text)
+  const flat = cleaned.replace(/\s+/g, " ");
+  for (const row of WC_PLANNING_PARENT_EVENTS) {
+    if (!row.present.test(cleaned) && !row.present.test(flat)) continue;
+    const [ys, ms, ds] = row.start;
+    const start = parseDateParts(ds, ms, ys);
+    if (!start) continue;
+    let end: Date | undefined;
+    if (row.end) {
+      const [ye, me, de] = row.end;
+      end = parseDateParts(de, me, ye) || undefined;
+    }
+    push(row.summary, start, end);
+  }
+
   return events;
 }
 
@@ -994,7 +1112,8 @@ export function parseSourceText(
   if (!dates.length) return { title, events: [] };
 
   const events: ParsedEvent[] = [];
-  for (const hit of dates.slice(0, 40)) {
+  // No hard event cap — school calendars with two years of holidays exceed 40.
+  for (const hit of dates) {
     const summary = lineSummary(cleaned, hit);
     if (!summary) continue;
     const start = new Date(
