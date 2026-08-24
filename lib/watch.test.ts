@@ -1306,6 +1306,13 @@ describe("parseSource", () => {
       ),
       "utf8"
     );
+    const secondChance = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-second-chance-extract.txt"
+      ),
+      "utf8"
+    );
 
     // Cross-page merge: /exams + nsc-june + sc-mayjune share results/registration
     const fromExam = parseWesternCapeExamPages([
@@ -1314,6 +1321,7 @@ describe("parseSource", () => {
       sc,
       examsHub,
       awards,
+      secondChance,
     ]);
 
     function must(
@@ -1435,6 +1443,33 @@ describe("parseSource", () => {
       countFact("Matric 2025 Awards to Candidates", "2026-01-29"),
       1
     );
+    // Second Chance page (linked from /exams): tutoring registration 09:00–14:00 SAST
+    const scmp = fromExam.find(
+      (e) =>
+        e.summary ===
+        "Registration to attend the second chance tutoring classes"
+    );
+    assert.ok(scmp, "Second Chance tutoring registration present");
+    assert.equal(scmp!.allDay, false, "Second Chance is timed, not all-day");
+    assert.equal(scmp!.timeZone, "Africa/Johannesburg");
+    assert.equal(
+      scmp!.start,
+      "2026-08-22T07:00:00.000Z",
+      "09:00 Africa/Johannesburg"
+    );
+    assert.equal(
+      scmp!.end,
+      "2026-08-22T12:00:00.000Z",
+      "14:00 Africa/Johannesburg"
+    );
+    assert.equal(
+      countFact(
+        "Registration to attend the second chance tutoring classes",
+        "2026-08-22"
+      ),
+      1,
+      "Second Chance registration once"
+    );
 
     // Same summary+dtstart fact → one UID in the ICS (no triplicate VEVENTs)
     const ics = eventsToIcs(
@@ -1443,6 +1478,21 @@ describe("parseSource", () => {
       fromExam,
       new Date("2026-08-24T00:00:00Z"),
       "https://www.westerncape.gov.za/education/school-calendar"
+    );
+    assert.match(
+      ics,
+      /DTSTART;TZID=Africa\/Johannesburg:20260822T090000/,
+      "Second Chance DTSTART 09:00 SAST"
+    );
+    assert.match(
+      ics,
+      /DTEND;TZID=Africa\/Johannesburg:20260822T140000/,
+      "Second Chance DTEND 14:00 SAST"
+    );
+    assert.doesNotMatch(
+      ics,
+      /SUMMARY:Registration to attend the second chance tutoring classes[\s\S]*?DTSTART;VALUE=DATE:20260822/,
+      "Second Chance must not be all-day DATE"
     );
     const resultsIdx = fromExam.findIndex(
       (e) =>

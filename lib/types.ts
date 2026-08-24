@@ -4,6 +4,8 @@ export type ParsedEvent = {
   start: string; // ISO
   end: string; // ISO
   allDay: boolean;
+  /** Olson TZID for timed events (e.g. Africa/Johannesburg). Ignored when allDay. */
+  timeZone?: string;
 };
 
 export type WatchRecord = {
