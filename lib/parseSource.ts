@@ -881,8 +881,10 @@ export function parseWesternCapeSchoolCalendarHtml(
 }
 
 /**
- * English WCED planning PDF: emit only clearly titled observances / named days
- * from the religious-observances tables. Untitled or admin-deadline mush is dropped.
+ * English WCED planning PDF — parent-facing dated rows with source wording:
+ * §2.1 religious observances, admissions windows, NSC/parent result dates,
+ * Grade 12 trial exam start/end. Untitled or day-less rows are dropped.
+ * Full ~295 admin deadline rows are NOT all emitted.
  */
 export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
   const cleaned = text.replace(/\u00a0/g, " ");
@@ -892,13 +894,11 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
   function push(summary: string, day: Date, endDay?: Date) {
     const s = summary.replace(/\s+/g, " ").trim().slice(0, 120);
     if (!s || isJunkSummary(s) || WEEKDAY_ONLY.test(s)) return;
-    if (/\b(sunset)\b/i.test(s) && !/^sukkot\b/i.test(s)) {
-      // keep "Sukkot" without glued "(sunset)" noise when we can
-    }
     const start = new Date(day.getFullYear(), day.getMonth(), day.getDate());
     const last = endDay
       ? new Date(endDay.getFullYear(), endDay.getMonth(), endDay.getDate())
       : start;
+    if (last.getTime() < start.getTime()) return;
     const key = `${s}|${start.toISOString()}|${last.toISOString()}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -909,6 +909,119 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
     return /(eid|passover|ascension|shavuot|rosh\s*hashana|yom\s*kippur|sukkot|shemini|simchat|diwali)/i.test(
       label
     );
+  }
+
+  /** Parent-facing numbered activities — not the full admin deadline list. */
+  function isParentFacingActivity(label: string): boolean {
+    if (
+      /school admissions?\s+(open|close)/i.test(label) ||
+      /admissions?\s+open for transfer/i.test(label) ||
+      /admissions?\s+close for transfer/i.test(label)
+    ) {
+      return true;
+    }
+    if (
+      /parents?\s+(are\s+)?informed of the outcome/i.test(label) ||
+      /parents?\s+confirm acceptance/i.test(label) ||
+      /parents?\s+to appeal/i.test(label) ||
+      /appeal the\s+progression\/promotion results/i.test(label)
+    ) {
+      return true;
+    }
+    if (
+      /Release of the 2025 National Senior Certificate/i.test(label) ||
+      /NSC examination re-marks/i.test(label) ||
+      /Release of May\/June NSC\/SC examination results/i.test(label) ||
+      /Grade\s*12\s+September trial examinations/i.test(label)
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  type DateSpan = { start: Date; end?: Date };
+
+  function parseDatedSpans(blob: string): DateSpan[] {
+    const out: DateSpan[] = [];
+    const add = (start: Date | null, end?: Date | null) => {
+      if (!start) return;
+      out.push(end ? { start, end } : { start });
+    };
+    // "15 April to 18 May 2026" / "28 May to 10 June 2026"
+    const crossMonth = new RegExp(
+      String.raw`(\d{1,2})\s+(${MONTH_ALT})\s+to\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "gi"
+    );
+    let m: RegExpExecArray | null;
+    while ((m = crossMonth.exec(blob)) !== null) {
+      const m1 = MONTHS[m[2].toLowerCase()];
+      const m2 = MONTHS[m[4].toLowerCase()];
+      const y = Number(m[5]);
+      if (m1 == null || m2 == null) continue;
+      add(parseDateParts(Number(m[1]), m1, y), parseDateParts(Number(m[3]), m2, y));
+    }
+    // "13 to 27 January 2026"
+    const sameMonth = new RegExp(
+      String.raw`(\d{1,2})\s+to\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      "gi"
+    );
+    while ((m = sameMonth.exec(blob)) !== null) {
+      const month = MONTHS[m[3].toLowerCase()];
+      const y = Number(m[4]);
+      if (month == null) continue;
+      add(
+        parseDateParts(Number(m[1]), month, y),
+        parseDateParts(Number(m[2]), month, y)
+      );
+    }
+    // Single "13 January 2026" — skip if already inside a range match span of text
+    const single = new RegExp(
+      String.raw`(^|[^0-9])(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+      "gi"
+    );
+    while ((m = single.exec(blob)) !== null) {
+      const idx = m.index + m[1].length;
+      // Skip if this day is the start/end of a "N to M Month" already captured nearby
+      const around = blob.slice(Math.max(0, idx - 8), idx + m[0].length + 8);
+      if (/\d{1,2}\s+to\s+\d{1,2}\s+\w+\s+20\d{2}/i.test(around)) continue;
+      if (
+        /\d{1,2}\s+\w+\s+to\s+\d{1,2}\s+\w+\s+20\d{2}/i.test(
+          blob.slice(Math.max(0, idx - 20), idx + 40)
+        )
+      ) {
+        continue;
+      }
+      const month = MONTHS[m[3].toLowerCase()];
+      if (month == null) continue;
+      add(parseDateParts(Number(m[2]), month, Number(m[4])));
+    }
+    return out;
+  }
+
+  function labelWithoutDates(blob: string): string {
+    return blob
+      .replace(
+        new RegExp(
+          String.raw`\s*\d{1,2}\s+to\s+\d{1,2}\s+(?:${MONTH_ALT})\s+20\d{2}`,
+          "gi"
+        ),
+        ""
+      )
+      .replace(
+        new RegExp(
+          String.raw`\s*\d{1,2}\s+(?:${MONTH_ALT})\s+to\s+\d{1,2}\s+(?:${MONTH_ALT})\s+20\d{2}`,
+          "gi"
+        ),
+        ""
+      )
+      .replace(
+        new RegExp(String.raw`\s*\d{1,2}\s+(?:${MONTH_ALT})\s+20\d{2}`, "gi"),
+        ""
+      )
+      .replace(/\s*\(to be confirmed\)/gi, "")
+      .replace(/\s+/g, " ")
+      .replace(/^[\s\-–—:]+|[\s\-–—:]+$/g, "")
+      .trim();
   }
 
   // Same-line observances (weekday may be glued: "Ascension DayThursday14 May 2026")
@@ -926,17 +1039,18 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
     push(label, date);
   }
 
-  // Multi-line religious blocks: label then date lines
   const lines = cleaned.split(/\r?\n/).map((l) => l.replace(/\s+/g, " ").trim());
+
+  // Multi-line religious blocks: label then date lines
   for (let i = 0; i < lines.length; i++) {
     let name = lines[i];
-    if (/^Shemini Atzeret and Simchat$/i.test(name) && /torah/i.test(lines[i + 1] || "")) {
+    if (
+      /^Shemini Atzeret and Simchat$/i.test(name) &&
+      /torah/i.test(lines[i + 1] || "")
+    ) {
       name = "Shemini Atzeret and Simchat Torah";
     }
     if (!isObservanceLabel(name)) continue;
-    if (/^(Eid ul Fitr|Eid ul Adha|Ascension Day|Yom Kippur|Sukkot|Diwali)\b/i.test(name)) {
-      // Usually handled by same-line pattern; still allow multi-line dates below
-    }
     const dates: Date[] = [];
     for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
       const dm = lines[j].match(
@@ -956,6 +1070,84 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
       if (/^[A-Za-z]/.test(lines[j]) && !WEEKDAY_ONLY.test(lines[j])) break;
     }
     for (const d of dates) push(name, d);
+  }
+
+  // Numbered activities: "35. School admissions open …" + date on same/next lines
+  type NumItem = { lines: string[] };
+  const items: NumItem[] = [];
+  let cur: NumItem | null = null;
+  for (const line of lines) {
+    const start = line.match(/^(\d+)\.\s+(.*)$/);
+    if (start) {
+      if (cur) items.push(cur);
+      cur = { lines: [start[2]] };
+      continue;
+    }
+    if (cur) {
+      // Stop collecting at section headers
+      if (/^3\.\d/.test(line) || /^Activity Due date$/i.test(line)) {
+        items.push(cur);
+        cur = null;
+        continue;
+      }
+      cur.lines.push(line);
+    }
+  }
+  if (cur) items.push(cur);
+
+  for (const item of items) {
+    const blob = item.lines.join(" ").replace(/\s+/g, " ").trim();
+    if (!isParentFacingActivity(blob)) continue;
+    // Month-only / TBC without a day — drop (do not invent)
+    if (
+      !/\d{1,2}\s+(?:to\s+\d{1,2}\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i.test(
+        blob
+      ) &&
+      !/\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)/i.test(
+        blob
+      )
+    ) {
+      continue;
+    }
+    const spans = parseDatedSpans(blob);
+    if (!spans.length) continue;
+    let label = labelWithoutDates(blob);
+    // Prefer a stable short source title for known rows
+    if (/Release of the 2025 National Senior Certificate/i.test(blob)) {
+      label = "Release of the 2025 National Senior Certificate (NSC) examination results";
+    } else if (/NSC examination re-marks/i.test(blob)) {
+      label = "Submit applications for NSC examination re-marks and rechecks";
+    } else if (/parents?\s+to appeal the\s+progression/i.test(blob)) {
+      label =
+        "Closing date for parents to appeal the progression/promotion results of their children";
+    } else if (/trial examinations?\s+earliest\s+start/i.test(blob)) {
+      label = "Grade 12 September trial examinations earliest start date";
+    } else if (/trial examinations?\s+end date/i.test(blob)) {
+      label = "Grade 12 September trial examinations end date";
+    } else if (/admissions?\s+open for Grades R/i.test(blob)) {
+      label = "School admissions open for Grades R, 1 and 8 (all ordinary public schools)";
+    } else if (/admissions?\s+close for Grades R/i.test(blob)) {
+      label = "School admissions close for Grades R, 1 and 8 (all ordinary public schools)";
+    } else if (/admissions?\s+open for transfer/i.test(blob)) {
+      label = "School admissions open for transfer requests (all ordinary public schools)";
+    } else if (/admissions?\s+close for transfer/i.test(blob)) {
+      label = "School admissions close for transfer requests (all ordinary public schools)";
+    } else if (/Parents informed of the outcome of online admission/i.test(blob)) {
+      label = "Parents informed of the outcome of online admission applications per email/SMS";
+    } else if (/Parents\s+confirm acceptance of Grades R/i.test(blob)) {
+      label = "Parents confirm acceptance of Grades R, 1 and 8 placements";
+    } else if (/Parents are informed of the outcome per email\/SMS/i.test(blob)) {
+      label = "Parents are informed of the outcome per email/SMS";
+    } else if (/Parents confirm acceptance of transfer placements/i.test(blob)) {
+      label = "Parents confirm acceptance of transfer placements";
+    } else if (/Release of May\/June NSC\/SC examination results/i.test(blob)) {
+      // Often month-only in the PDF — only emit if a day span was parsed
+      label = "Release of May/June NSC/SC examination results";
+    }
+    if (!label || label.length < 8) continue;
+    for (const span of spans) {
+      push(label, span.start, span.end);
+    }
   }
 
   return events;
