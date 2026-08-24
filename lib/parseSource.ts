@@ -766,6 +766,37 @@ function allDayDay(
   return allDaySpan(summary, description, day, day);
 }
 
+/** Timed span in an Olson zone. Wall clock → ISO via fixed SAST offset when zone is Johannesburg. */
+function timedSpanInZone(
+  summary: string,
+  description: string,
+  year: number,
+  monthIndex: number,
+  day: number,
+  startHour: number,
+  startMinute: number,
+  endHour: number,
+  endMinute: number,
+  timeZone: string
+): ParsedEvent {
+  // Africa/Johannesburg is UTC+2 year-round (no DST). Other zones not used yet.
+  const offsetHours = timeZone === "Africa/Johannesburg" ? 2 : 0;
+  const start = new Date(
+    Date.UTC(year, monthIndex, day, startHour - offsetHours, startMinute, 0)
+  );
+  const end = new Date(
+    Date.UTC(year, monthIndex, day, endHour - offsetHours, endMinute, 0)
+  );
+  return {
+    summary,
+    description,
+    start: start.toISOString(),
+    end: end.toISOString(),
+    allDay: false,
+    timeZone,
+  };
+}
+
 function pickBound(bounds: WcBound[], mark: 1 | 2): Date | null {
   const hit = bounds.find((b) => b.mark === mark);
   if (hit) return hit.date;
@@ -1494,17 +1525,38 @@ export function parseWesternCapeExamPage(text: string): ParsedEvent[] {
     if (d) push(`Matric 2025 Awards to ${kind}`, d);
   }
 
-  // Second Chance Matric Programme page (linked from /exams): tutoring registration day
+  // Second Chance Matric Programme page (linked from /exams): tutoring registration
+  // window 09h00–14h00 on the stated Saturday (Africa/Johannesburg), not all-day.
   const scmp = flat.match(
     new RegExp(
-      String.raw`Registration\s+to\s+attend\s+the\s+second\s+chance\s+tutoring\s+classes\s+will\s+take\s+place[\s\S]{0,80}?on\s+Saturday,\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
+      String.raw`Registration\s+to\s+attend\s+the\s+second\s+chance\s+tutoring\s+classes\s+will\s+take\s+place\s+from\s+(\d{1,2})h(\d{2})\s+to\s+(\d{1,2})h(\d{2})\s+on\s+Saturday,\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})`,
       "i"
     )
   );
   if (scmp) {
-    const d = day(Number(scmp[1]), scmp[2], Number(scmp[3]));
-    if (d) {
-      push("Registration to attend the second chance tutoring classes", d);
+    const month = MONTHS[scmp[6].toLowerCase()];
+    const y = Number(scmp[7]);
+    const d = Number(scmp[5]);
+    if (month != null && d >= 1 && d <= 31) {
+      const summary =
+        "Registration to attend the second chance tutoring classes";
+      const ev = timedSpanInZone(
+        summary,
+        summary,
+        y,
+        month,
+        d,
+        Number(scmp[1]),
+        Number(scmp[2]),
+        Number(scmp[3]),
+        Number(scmp[4]),
+        "Africa/Johannesburg"
+      );
+      const key = `${ev.summary}|${ev.start}|${ev.end}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        events.push(ev);
+      }
     }
   }
 

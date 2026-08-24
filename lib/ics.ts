@@ -57,6 +57,34 @@ function formatLocalDateTime(iso: string): string {
   );
 }
 
+/** Wall-clock DATE-TIME in an Olson zone (for DTSTART;TZID=…). */
+function formatTzDateTime(iso: string, timeZone: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(iso))
+      .filter((p) => p.type !== "literal")
+      .map((p) => [p.type, p.value])
+  );
+  return (
+    parts.year +
+    parts.month +
+    parts.day +
+    "T" +
+    parts.hour +
+    parts.minute +
+    parts.second
+  );
+}
+
 /** Stable UID for a watch event so calendar clients update in place. */
 export function eventUid(watchId: string, event: ParsedEvent, index: number): string {
   const key = createHash("sha256")
@@ -122,6 +150,14 @@ export function eventsToIcs(
       if (event.allDay) {
         lines.push(`DTSTART;VALUE=DATE:${formatLocalDate(event.start)}`);
         lines.push(`DTEND;VALUE=DATE:${formatLocalDate(event.end)}`);
+      } else if (event.timeZone) {
+        const tz = event.timeZone.replace(/[;:,]/g, "");
+        lines.push(
+          `DTSTART;TZID=${tz}:${formatTzDateTime(event.start, event.timeZone)}`
+        );
+        lines.push(
+          `DTEND;TZID=${tz}:${formatTzDateTime(event.end, event.timeZone)}`
+        );
       } else {
         lines.push(`DTSTART:${formatLocalDateTime(event.start)}`);
         lines.push(`DTEND:${formatLocalDateTime(event.end)}`);
