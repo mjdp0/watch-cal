@@ -669,6 +669,38 @@ describe("parseSource", () => {
       "#280 Grade 11→12 subject change by parents"
     );
 
+    // Next parent-usable batch (appeal / accommodation closes with real days)
+    must(
+      /^Submit assessment accommodation appeals for Grade 12$/,
+      "2026-01-26",
+      "2026-01-27",
+      "#41 Grade 12 assessment accommodation appeals"
+    );
+    must(
+      /^All appeals \(for progression and promotion results for Grades 1[–—−-]11 of 2025\) finalised$/,
+      "2026-02-13",
+      "2026-02-14",
+      "#47 progression/promotion appeals finalised"
+    );
+    must(
+      /^Applications for assessment accommodations for Grades R[–—−-]11 close$/,
+      "2026-10-03",
+      "2026-10-04",
+      "#267 assessment accommodations applications close"
+    );
+    must(
+      /^Submit assessment accommodations appeals for Grades 10[–—−-]11$/,
+      "2026-11-06",
+      "2026-11-07",
+      "#271 Grades 10–11 assessment accommodations appeals"
+    );
+    must(
+      /^Appeals for Grades 10[–—−-]11$/,
+      "2026-11-06",
+      "2026-11-07",
+      "#286 Grades 10–11 appeals"
+    );
+
     // #209 PDF is month-only ("August 2026") — must NOT invent 31 Jul or 1–31 Aug
     const mayJuneResults = events.filter((e) =>
       /Release of May\/June NSC\/SC examination results/i.test(e.summary)
@@ -748,6 +780,39 @@ describe("parseSource", () => {
     assert.match(transferConfirm!.start, /^2026-09-17/);
     assert.match(transferConfirm!.end, /^2026-09-30/);
     assert.doesNotMatch(transferConfirm!.start, /^2026-09-16/);
+
+    // Batch-3 parent rows also follow the due-date cell
+    const moved47 = extract.replace(
+      /(47\.\s+All\s+appeals[\s\S]*?)13 February 2026/,
+      "$114 February 2026"
+    );
+    assert.match(moved47, /47\.[\s\S]*?14 February 2026/);
+    const events47 = parseWesternCapePlanningPdf(moved47);
+    const appealsFinal = events47.find(
+      (e) =>
+        e.summary ===
+        "All appeals (for progression and promotion results for Grades 1–11 of 2025) finalised"
+    );
+    assert.ok(appealsFinal);
+    assert.match(appealsFinal!.start, /^2026-02-14/);
+    assert.match(appealsFinal!.end, /^2026-02-15/);
+    assert.doesNotMatch(appealsFinal!.start, /^2026-02-13/);
+
+    const moved267 = extract.replace(
+      /(267\.\s+Applications\s+for\s+assessment\s+accommodations[\s\S]*?)03 October 2026/,
+      "$104 October 2026"
+    );
+    assert.match(moved267, /267\.[\s\S]*?04 October 2026/);
+    const events267 = parseWesternCapePlanningPdf(moved267);
+    const accomClose = events267.find(
+      (e) =>
+        e.summary ===
+        "Applications for assessment accommodations for Grades R–11 close"
+    );
+    assert.ok(accomClose);
+    assert.match(accomClose!.start, /^2026-10-04/);
+    assert.match(accomClose!.end, /^2026-10-05/);
+    assert.doesNotMatch(accomClose!.start, /^2026-10-03/);
   });
 
   it("item #42 due date stays 27 Jan when 29 Jan sits before 43. in the extract", async () => {
