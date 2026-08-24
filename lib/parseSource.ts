@@ -1021,6 +1021,24 @@ const WC_PLANNING_PARENT_ROWS: Array<{
     summary: "Election of Representative Councils of Learners (RCLs)",
   },
   {
+    item: 65,
+    titleRe: /Induction\s+of\s+new\s+RCLs/i,
+    summary: "Induction of new RCLs",
+  },
+  {
+    item: 66,
+    titleRe:
+      /Election\s+of\s+RCL\s+office-bearers\s+and\s+governing\s+body\s+learner\s+representatives/i,
+    summary:
+      "Election of RCL office-bearers and governing body learner representatives",
+  },
+  {
+    item: 67,
+    titleRe:
+      /Election\s+of\s+District\s+and\s+Provincial\s+Council\s+of\s+Learners\s+Forums/i,
+    summary: "Election of District and Provincial Council of Learners Forums",
+  },
+  {
     item: 68,
     titleRe:
       /South\s+African\s+Schools\s+Choral\s+Eisteddfod\s+\(SASCE\)\s*[–—−-]\s*registration/i,
@@ -1061,10 +1079,21 @@ const WC_PLANNING_PARENT_ROWS: Array<{
       "System displays the outcome of Grades R, 1 and 8 online admission applications",
   },
   {
+    item: 145,
+    titleRe:
+      /Closing\s+date\s+for\s+applications\s+for\s+the\s+provincial\s+skills\s+competition/i,
+    summary: "Closing date for applications for the provincial skills competition",
+  },
+  {
     item: 147,
     titleRe:
       /Grade\s+10\s+subject\s+change\s+applications\s+by\s+parents/i,
     summary: "Grade 10 subject change applications by parents",
+  },
+  {
+    item: 149,
+    titleRe: /Schools\s+Democracy\s+Month/i,
+    summary: "Schools Democracy Month",
   },
   {
     item: 150,
@@ -1085,9 +1114,19 @@ const WC_PLANNING_PARENT_ROWS: Array<{
     summary: "Youth Citizen Action Programme (YCAP) – registration",
   },
   {
+    item: 153,
+    titleRe: /School\s+Safety\s+Summit/i,
+    summary: "School Safety Summit",
+  },
+  {
     item: 154,
     titleRe: /YCAP\s*[–—−-]\s*provincial\s+workshop\s+\(virtual\)/i,
     summary: "YCAP – provincial workshop (virtual)",
+  },
+  {
+    item: 155,
+    titleRe: /RCL\s*[–—−-]\s*conference/i,
+    summary: "RCL – conference",
   },
   {
     item: 156,
@@ -1106,9 +1145,32 @@ const WC_PLANNING_PARENT_ROWS: Array<{
     summary: "System displays the outcome of transfer requests",
   },
   {
+    item: 220,
+    titleRe:
+      /INkosi\s+Albert\s+Luthuli\s*[–—−-]\s*provincial\s+competition/i,
+    summary: "INkosi Albert Luthuli – provincial competition",
+  },
+  {
     item: 221,
     titleRe: /YCAP\s*[–—−-]\s*provincial\s+workshop\s+\(virtual\)/i,
     summary: "YCAP – provincial workshop (virtual)",
+  },
+  {
+    item: 222,
+    titleRe:
+      /Heritage\s+Education\s+Schools\s+Outreach\s+Programme\s*[–—−-]\s*provincial\s+competition/i,
+    summary:
+      "Heritage Education Schools Outreach Programme – provincial competition",
+  },
+  {
+    item: 223,
+    titleRe: /School\s+Safety\s+Round\s+Table\s*[–—−-]\s*rural/i,
+    summary: "School Safety Round Table – rural",
+  },
+  {
+    item: 224,
+    titleRe: /School\s+Safety\s+Round\s+Table\s*[–—−-]\s*urban/i,
+    summary: "School Safety Round Table – urban",
   },
   {
     item: 225,
