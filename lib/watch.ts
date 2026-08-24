@@ -20,8 +20,12 @@ import {
   mergeWesternCapeExamEvents,
   parseSourceText,
   parseWesternCapeExamPage,
+  parseWesternCapeNovNscRegFormPdf,
+  parseWesternCapeNovNscTimetablePdf,
   parseWesternCapePlanningPdf,
   WESTERN_CAPE_EXAM_PAGE_URLS,
+  WESTERN_CAPE_NOV_NSC_REG_FORM_PDF_URL,
+  WESTERN_CAPE_NOV_NSC_TIMETABLE_PDF_URL,
   WESTERN_CAPE_PLANNING_PDF_URL,
 } from "./parseSource";
 import {
@@ -68,8 +72,8 @@ function isStale(watch: WatchRecord, now: Date): boolean {
 
 /**
  * Parse primary source; for the Western Cape school-calendar page also ingest
- * the English planning PDF and Grade 12 / NSC exam nav pages linked from that
- * site into the same watch.
+ * the English planning PDF, Grade 12 / NSC exam nav pages, and Nov NSC
+ * timetable / registration form PDFs linked from that site into the same watch.
  */
 async function parseWatchSource(
   sourceUrl: string,
@@ -101,6 +105,22 @@ async function parseWatchSource(
         hashMaterial = hashMaterial + "\n" + page.text;
       } catch {
         // Optional enrichment — school-calendar HTML + planning still ship.
+      }
+    }
+    for (const pdfUrl of [
+      WESTERN_CAPE_NOV_NSC_TIMETABLE_PDF_URL,
+      WESTERN_CAPE_NOV_NSC_REG_FORM_PDF_URL,
+    ]) {
+      try {
+        const pdf = await fetchSource(pdfUrl, fetcher);
+        const parsed =
+          pdfUrl === WESTERN_CAPE_NOV_NSC_TIMETABLE_PDF_URL
+            ? parseWesternCapeNovNscTimetablePdf(pdf.text)
+            : parseWesternCapeNovNscRegFormPdf(pdf.text);
+        examBatches.push(parsed);
+        hashMaterial = hashMaterial + "\n" + pdf.text;
+      } catch {
+        // Optional — HTML exam-nav + planning still ship.
       }
     }
     all = [...all, ...mergeWesternCapeExamEvents(examBatches)];
