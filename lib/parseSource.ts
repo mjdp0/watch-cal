@@ -883,8 +883,9 @@ export function parseWesternCapeSchoolCalendarHtml(
 /**
  * Parent-facing numbered rows from the English planning PDF (PDF wording).
  * Dates are read from each row’s due-date column — never hardcoded.
- * Month-only cells (e.g. #138 “May and June 2026”) are dropped; no invented days.
- * Skips CEMIS/sign-off/QMS/LTSM admin mush. Does not invent absent items 102–117.
+ * Month-only cells (e.g. #138 “May and June 2026”, #209 “August 2026”) are
+ * dropped; no invented days. Skips CEMIS/sign-off/QMS/LTSM admin mush.
+ * Does not invent absent items 102–117.
  */
 const WC_PLANNING_PARENT_ROWS: Array<{
   item: number;
@@ -930,11 +931,23 @@ const WC_PLANNING_PARENT_ROWS: Array<{
     summary: "Parents are informed of the outcome per email/SMS",
   },
   {
+    item: 201,
+    titleRe:
+      /Parents\s+confirm\s+acceptance\s+of\s+transfer\s+placements/i,
+    summary: "Parents confirm acceptance of transfer placements",
+  },
+  {
     item: 36,
     titleRe:
       /Release\s+of\s+the\s+2025\s+National\s+Senior\s+Certificate\s+\(NSC\)\s+examination\s+results/i,
     summary:
       "Release of the 2025 National Senior Certificate (NSC) examination results",
+  },
+  {
+    item: 37,
+    titleRe:
+      /Submit\s+applications\s+for\s+NSC\s+examination\s+re-marks\s+and\s+rechecks/i,
+    summary: "Submit applications for NSC examination re-marks and rechecks",
   },
   {
     item: 42,
@@ -967,6 +980,39 @@ const WC_PLANNING_PARENT_ROWS: Array<{
       /Closing\s+date\s+for\s+parents\s+to\s+appeal\s+the\s+progression\/promotion\s+results\s+of\s+their\s+children/i,
     summary:
       "Closing date for parents to appeal the progression/promotion results of their children",
+  },
+  {
+    item: 39,
+    titleRe:
+      /Principals\s+communicate\s+outcomes\s+of\s+progression\/promotion\s+appeals\s+to\s+parents\s+in\s+writing/i,
+    summary:
+      "Principals communicate outcomes of progression/promotion appeals to parents in writing",
+  },
+  {
+    item: 45,
+    titleRe:
+      /Closing\s+date\s+for\s+parents\s+dissatisfied\s+with\s+the\s+outcome\s+of\s+their\s+progression\/promotion\s+appeals,\s+to\s+appeal\s+to\s+district\s+directors/i,
+    summary:
+      "Closing date for parents dissatisfied with the outcome of their progression/promotion appeals, to appeal to district directors",
+  },
+  {
+    item: 58,
+    titleRe:
+      /Grade\s+11\s+subject\s+change\s+applications\s+by\s+parents/i,
+    summary: "Grade 11 subject change applications by parents",
+  },
+  {
+    item: 147,
+    titleRe:
+      /Grade\s+10\s+subject\s+change\s+applications\s+by\s+parents/i,
+    summary: "Grade 10 subject change applications by parents",
+  },
+  {
+    item: 280,
+    titleRe:
+      /Subject\s+change\s+applications\s+by\s+parents\s+of\s+Grade\s+11\s+learners/i,
+    summary:
+      "Subject change applications by parents of Grade 11 learners – for Grade 12 year",
   },
 ];
 
