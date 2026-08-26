@@ -465,10 +465,10 @@ describe("parseSource", () => {
       );
       assert.match(e.start, /^2026-/);
     }
-    // Not the full admin deadline calendar — only titled observances + parent rows
-    assert.doesNotMatch(
+    // Full numbered day-dated list includes admin deadlines (not a parent-only slice)
+    assert.match(
       events.map((e) => e.summary).join("\n"),
-      /Snap Survey|job descriptions|CEMIS|QMS|LTSM|sign off/i
+      /job descriptions|Quality Management System|\bLTSM\b|WCED 043|sign off/i
     );
   });
 
@@ -547,19 +547,19 @@ describe("parseSource", () => {
 
     // Parent-facing MUST rows (PDF wording / dates from English planning fixture)
     must(
-      /^School admissions open for Grades R, 1 and 8$/,
+      /^School admissions open for Grades R, 1 and 8\b/,
       "2026-03-10",
       "2026-03-11",
       "admissions open R/1/8"
     );
     must(
-      /^School admissions close for Grades R, 1 and 8$/,
+      /^School admissions close for Grades R, 1 and 8\b/,
       "2026-04-14",
       "2026-04-15",
       "admissions close R/1/8"
     );
     must(
-      /^Parents informed of the outcome of online admission applications$/,
+      /^Parents informed of the outcome of online admission applications\b/,
       "2026-05-28",
       "2026-06-11",
       "parents informed admissions"
@@ -571,13 +571,13 @@ describe("parseSource", () => {
       "parents confirm placements"
     );
     must(
-      /^School admissions open for transfer requests$/,
+      /^School admissions open for transfer requests\b/,
       "2026-08-03",
       "2026-08-04",
       "transfer open"
     );
     must(
-      /^School admissions close for transfer requests$/,
+      /^School admissions close for transfer requests\b/,
       "2026-08-17",
       "2026-08-18",
       "transfer close"
@@ -677,19 +677,19 @@ describe("parseSource", () => {
       "#201 parents confirm transfer placements"
     );
     must(
-      /^Grade 11 subject change applications by parents$/,
+      /^Grade 11 subject change applications by parents\b/,
       "2026-03-27",
       "2026-03-28",
       "#58 Grade 11 subject change by parents"
     );
     must(
-      /^Grade 10 subject change applications by parents$/,
+      /^Grade 10 subject change applications by parents\b/,
       "2026-06-26",
       "2026-06-27",
       "#147 Grade 10 subject change by parents"
     );
     must(
-      /^Subject change applications by parents of Grade 11 learners [–—−-] for Grade 12 year$/,
+      /^Subject change applications by parents of Grade 11 learners [–—−-] for Grade 12 year\b/,
       "2026-12-11",
       "2026-12-12",
       "#280 Grade 11→12 subject change by parents"
@@ -783,7 +783,7 @@ describe("parseSource", () => {
       "#289 Safe Schools Holiday Programme"
     );
     must(
-      /^Safe Schools' Back to School Drive$/,
+      /^Safe Schools[''\u2019] Back to School Drive$/,
       "2026-02-02",
       "2026-02-07",
       "#63 Safe Schools Back to School Drive"
@@ -925,11 +925,12 @@ describe("parseSource", () => {
       assert.notEqual(e.start.slice(0, 10), "2026-08-01", "do not invent 1 Aug");
     }
 
-    // Do not dump untitled admin mush; do not invent absent 102–117
-    assert.doesNotMatch(
+    // Full dated numbered list includes staff/CEMIS/LTSM/finance rows from the PDF
+    assert.match(
       events.map((e) => e.summary).join("\n"),
-      /Snap Survey|job descriptions|Quality Management System|\bLTSM\b|WCED 043/i
+      /job descriptions|Quality Management System|\bLTSM\b|WCED 043|Bulletin 1 for institution-based/i
     );
+    // Do not invent absent items 102–117 (unreadable gap in the published English PDF)
     assert.ok(
       !events.some((e) => /\b102\b|\b117\b/.test(e.summary)),
       "do not invent absent items 102–117"
@@ -953,7 +954,8 @@ describe("parseSource", () => {
     assert.match(moved, /35\.[\s\S]*?11 March 2026/);
     const events = parseWesternCapePlanningPdf(moved);
     const open = events.find(
-      (e) => e.summary === "School admissions open for Grades R, 1 and 8"
+      (e) =>
+        /^School admissions open for Grades R, 1 and 8\b/.test(e.summary)
     );
     assert.ok(open);
     assert.match(open!.start, /^2026-03-11/);
@@ -1293,6 +1295,184 @@ describe("parseSource", () => {
           e.start.startsWith("2026-05-01") && e.end.startsWith("2026-07-01")
       ),
       "no invented May–June month span"
+    );
+  });
+
+  it("Western Cape planning emits the full readable numbered day-dated list", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    const extract = await readFile(
+      path.join(
+        process.cwd(),
+        "lib/fixtures/western-cape-planning-2026-extract.txt"
+      ),
+      "utf8"
+    );
+    const events = parseWesternCapePlanningPdf(extract);
+    // Optional: same English PDF text as recorded live extract when present
+    let liveEvents = events;
+    try {
+      const live = await readFile(
+        "/tmp/wc-inspect/planning-live-extract.txt",
+        "utf8"
+      );
+      liveEvents = parseWesternCapePlanningPdf(live);
+    } catch {
+      /* CI / local without the live dump — fixture is the same file */
+    }
+
+    // Staff / CEMIS / LTSM / finance / bulletins / forums / sign-offs (not parent slice)
+    for (const re of [
+      /^Principals sign off$/,
+      /Submit WCED 043 quarterly reports for period/,
+      /Quality Management System \(QMS\)/,
+      /Signing of job descriptions/,
+      /^Bulletin 1 for institution-based public servants$/,
+      /^Bulletin 1 for institution-based educators$/,
+      /Circuit Principals. Forum \(CPF\) meetings/,
+      /LTSM committees appointed in writing/,
+      /Copies of annual financial statements/,
+      /^Circuit managers sign off on textbook retrieval rates online$/,
+    ]) {
+      assert.ok(
+        events.some((e) => re.test(e.summary)),
+        `fixture missing numbered row ~${re}`
+      );
+      assert.ok(
+        liveEvents.some((e) => re.test(e.summary)),
+        `live PDF missing numbered row ~${re}`
+      );
+    }
+
+    // Stacked short rows: #1=27 Jan, #2=4 Feb (not both 27 Jan)
+    const janSignoff = events.find(
+      (e) =>
+        e.summary === "Principals sign off" && e.start.startsWith("2026-01-27")
+    );
+    const febCm = events.find(
+      (e) =>
+        e.summary === "Circuit managers sign off" &&
+        e.start.startsWith("2026-02-04")
+    );
+    assert.ok(janSignoff, "#1 Principals sign off is 27 Jan");
+    assert.ok(febCm, "#2 Circuit managers sign off is 4 Feb");
+
+    // #17 CEMIS governing-body details (long title must not die on dangling "and")
+    assert.ok(
+      events.some(
+        (e) =>
+          /Schools update governing body member details on CEMIS/i.test(
+            e.summary
+          ) && e.start.startsWith("2026-02-06")
+      ),
+      "#17 governing body CEMIS details on 6 Feb"
+    );
+
+    // Grade-band stacks: earlier bands must not be dropped for the last band
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 10, 11 and 12" && e.start.startsWith("2026-06-01")
+      ),
+      "#140 Grades 10–12 earliest start 1 Jun"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 7, 8 and 9" && e.start.startsWith("2026-06-08")
+      ),
+      "#141 Grades 7–9 earliest start 8 Jun"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 4, 5 and 6" && e.start.startsWith("2026-06-08")
+      ),
+      "#142 Grades 4–6 earliest start 8 Jun"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 10 and 11" && e.start.startsWith("2026-11-10")
+      ),
+      "#272 Grades 10–11 earliest start 10 Nov"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 7, 8 and 9" && e.start.startsWith("2026-11-17")
+      ),
+      "#273 Grades 7–9 earliest start 17 Nov"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 4, 5 and 6" && e.start.startsWith("2026-11-19")
+      ),
+      "#274 Grades 4–6 earliest start 19 Nov"
+    );
+
+    // #210 month-only September — do not invent 26 Sep from "2026 September" bleed
+    assert.equal(
+      events.filter((e) =>
+        /Release of May\/June NSC\/SC re-mark\/recheck results/i.test(e.summary)
+      ).length,
+      0,
+      "#210 must not invent a day from month-only September 2026"
+    );
+
+    // Honest published-file gap: items 102–117 are absent between 101 and 118
+    assert.match(extract, /101\.\s+Each governing body member/);
+    assert.match(extract, /118\.\s+Copies/);
+    assert.doesNotMatch(extract, /\n\s*10[2-9]\.\s+/);
+    assert.doesNotMatch(extract, /\n\s*11[0-7]\.\s+/);
+    assert.ok(
+      !events.some((e) => /item\s*#?\s*10[2-9]|item\s*#?\s*11[0-7]/i.test(e.summary)),
+      "do not invent names for unread 102–117"
+    );
+
+    // Fixture and live English PDF should agree on planning row volume
+    assert.ok(
+      events.filter((e) => !/(eid|passover|ascension|shavuot|rosh|yom|sukkot|shemini|diwali)/i.test(e.summary)).length >= 180,
+      `expected many numbered day-dated rows, got ${events.length}`
+    );
+    assert.equal(events.length, liveEvents.length, "fixture vs live PDF event count");
+  });
+
+  it("year-bleed does not invent a day from month-only stacked cells (#210)", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    const invent = [
+      "2026 SCHOOL PLANNING CALENDAR",
+      "209. Release of May/June NSC/SC examination results",
+      "210. Release of May/June NSC/SC re-mark/recheck results",
+      "August 2026",
+      "September 2026",
+      "211. Submission of Grade 12 final schedules August 2026",
+      "212. Grade 12 September trial examinations earliest start date 26 August 2026",
+    ].join("\n");
+    const events = parseWesternCapePlanningPdf(invent);
+    assert.equal(
+      events.filter((e) =>
+        /re-mark\/recheck results/i.test(e.summary)
+      ).length,
+      0,
+      "do not parse 26 Sep from 2026 September"
+    );
+    assert.equal(
+      events.filter((e) =>
+        /Release of May\/June NSC\/SC examination results/i.test(e.summary)
+      ).length,
+      0,
+      "#209 month-only August stays dropped"
+    );
+    // Neighbour with a real day still emits
+    assert.ok(
+      events.some(
+        (e) =>
+          /Grade 12 September trial examinations earliest start date/i.test(
+            e.summary
+          ) && e.start.startsWith("2026-08-26")
+      ),
+      "#212 keeps 26 August"
     );
   });
 
