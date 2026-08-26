@@ -1000,6 +1000,7 @@ type PlanningDueHit = { index: number; length: number; start: Date; end: Date };
 /**
  * All day-dated due expressions in a block, in source order.
  * Range hits absorb inner single-day matches so "13 to 27 January" is one cell.
+ * Day digits must not be the trailing digits of a year ("2026 September" ≠ 26 Sep).
  */
 function parsePlanningDueDates(block: string): PlanningDueHit[] {
   const flat = block.replace(/\s+/g, " ").trim();
@@ -1009,7 +1010,7 @@ function parsePlanningDueDates(block: string): PlanningDueHit[] {
   const ranges: Array<{ index: number; end: number }> = [];
 
   const crossRe = new RegExp(
-    String.raw`(\d{1,2})\s+(${MONTH_ALT})\s*(?:to|[–—−-])\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+    String.raw`(?<![0-9])(\d{1,2})\s+(${MONTH_ALT})\s*(?:to|[–—−-])\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
     "gi"
   );
   let m: RegExpExecArray | null;
@@ -1027,7 +1028,7 @@ function parsePlanningDueDates(block: string): PlanningDueHit[] {
   }
 
   const sameRe = new RegExp(
-    String.raw`(\d{1,2})\s+to\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+    String.raw`(?<![0-9])(\d{1,2})\s+to\s+(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
     "gi"
   );
   while ((m = sameRe.exec(flat)) !== null) {
@@ -1043,7 +1044,7 @@ function parsePlanningDueDates(block: string): PlanningDueHit[] {
   }
 
   const dayRe = new RegExp(
-    String.raw`(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+    String.raw`(?<![0-9])(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
     "gi"
   );
   while ((m = dayRe.exec(flat)) !== null) {
@@ -1157,6 +1158,18 @@ function planningDueCellIsNonDay(block: string): boolean {
   return false;
 }
 
+/** Clip a planning title without leaving dangling "and"/commas (isJunkSummary). */
+function clipPlanningTitle(s: string, max = 160): string {
+  let t = s.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  t = t.slice(0, max);
+  const comma = t.lastIndexOf(", ");
+  const space = t.lastIndexOf(" ");
+  const cut = Math.max(comma, space);
+  if (cut >= Math.floor(max * 0.55)) t = t.slice(0, cut);
+  return t.replace(/[,\s]+$/g, "").replace(/\band\s*$/i, "").trim();
+}
+
 /** Activity title from a numbered block (PDF wording before the due-date cell). */
 function planningActivityTitle(block: string): string {
   const flat = block
@@ -1168,20 +1181,17 @@ function planningActivityTitle(block: string): string {
   // into the summary (e.g. #168 after redistributing #166–#168).
   const hits = parsePlanningDueDates(flat);
   if (hits.length && hits[0].index > 0) {
-    return flat
-      .slice(0, hits[0].index)
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 160);
+    return clipPlanningTitle(flat.slice(0, hits[0].index));
   }
   const cutRe = new RegExp(
     String.raw`(?:\bOngoing\b|\bTo be confirmed\b|\bBefore\b|\bAs per\b|(?:^|[^0-9/])(${MONTH_ALT})\s+and\s+(${MONTH_ALT})\s+(20\d{2})\b|(?:^|[^0-9/])(${MONTH_ALT})\s+to\s+(${MONTH_ALT})\s+(20\d{2})\b|(?:^|[^0-9/])(${MONTH_ALT})\s+(20\d{2})\b)`,
     "i"
   );
   const m = cutRe.exec(flat);
-  let title = (m && m.index > 0 ? flat.slice(0, m.index) : flat).trim();
-  title = title.replace(/\s+\d{1,2}\s*$/, "").trim();
-  return title.replace(/\s+/g, " ").slice(0, 160);
+  const title = (m && m.index > 0 ? flat.slice(0, m.index) : flat).trim();
+  // Do not strip trailing grade numbers ("Grades 10, 11 and 12") — that left
+  // dangling "and" which isJunkSummary drops.
+  return clipPlanningTitle(title);
 }
 
 /**

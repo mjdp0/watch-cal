@@ -1356,6 +1356,70 @@ describe("parseSource", () => {
     assert.ok(janSignoff, "#1 Principals sign off is 27 Jan");
     assert.ok(febCm, "#2 Circuit managers sign off is 4 Feb");
 
+    // #17 CEMIS governing-body details (long title must not die on dangling "and")
+    assert.ok(
+      events.some(
+        (e) =>
+          /Schools update governing body member details on CEMIS/i.test(
+            e.summary
+          ) && e.start.startsWith("2026-02-06")
+      ),
+      "#17 governing body CEMIS details on 6 Feb"
+    );
+
+    // Grade-band stacks: earlier bands must not be dropped for the last band
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 10, 11 and 12" && e.start.startsWith("2026-06-01")
+      ),
+      "#140 Grades 10–12 earliest start 1 Jun"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 7, 8 and 9" && e.start.startsWith("2026-06-08")
+      ),
+      "#141 Grades 7–9 earliest start 8 Jun"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 4, 5 and 6" && e.start.startsWith("2026-06-08")
+      ),
+      "#142 Grades 4–6 earliest start 8 Jun"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 10 and 11" && e.start.startsWith("2026-11-10")
+      ),
+      "#272 Grades 10–11 earliest start 10 Nov"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 7, 8 and 9" && e.start.startsWith("2026-11-17")
+      ),
+      "#273 Grades 7–9 earliest start 17 Nov"
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.summary === "Grades 4, 5 and 6" && e.start.startsWith("2026-11-19")
+      ),
+      "#274 Grades 4–6 earliest start 19 Nov"
+    );
+
+    // #210 month-only September — do not invent 26 Sep from "2026 September" bleed
+    assert.equal(
+      events.filter((e) =>
+        /Release of May\/June NSC\/SC re-mark\/recheck results/i.test(e.summary)
+      ).length,
+      0,
+      "#210 must not invent a day from month-only September 2026"
+    );
+
     // Honest published-file gap: items 102–117 are absent between 101 and 118
     assert.match(extract, /101\.\s+Each governing body member/);
     assert.match(extract, /118\.\s+Copies/);
@@ -1372,6 +1436,44 @@ describe("parseSource", () => {
       `expected many numbered day-dated rows, got ${events.length}`
     );
     assert.equal(events.length, liveEvents.length, "fixture vs live PDF event count");
+  });
+
+  it("year-bleed does not invent a day from month-only stacked cells (#210)", async () => {
+    const { parseWesternCapePlanningPdf } = await import("./parseSource");
+    const invent = [
+      "2026 SCHOOL PLANNING CALENDAR",
+      "209. Release of May/June NSC/SC examination results",
+      "210. Release of May/June NSC/SC re-mark/recheck results",
+      "August 2026",
+      "September 2026",
+      "211. Submission of Grade 12 final schedules August 2026",
+      "212. Grade 12 September trial examinations earliest start date 26 August 2026",
+    ].join("\n");
+    const events = parseWesternCapePlanningPdf(invent);
+    assert.equal(
+      events.filter((e) =>
+        /re-mark\/recheck results/i.test(e.summary)
+      ).length,
+      0,
+      "do not parse 26 Sep from 2026 September"
+    );
+    assert.equal(
+      events.filter((e) =>
+        /Release of May\/June NSC\/SC examination results/i.test(e.summary)
+      ).length,
+      0,
+      "#209 month-only August stays dropped"
+    );
+    // Neighbour with a real day still emits
+    assert.ok(
+      events.some(
+        (e) =>
+          /Grade 12 September trial examinations earliest start date/i.test(
+            e.summary
+          ) && e.start.startsWith("2026-08-26")
+      ),
+      "#212 keeps 26 August"
+    );
   });
 
   it("WC exam nav pages emit proven parent day-dates (not planning #138/#209 invent)", async () => {
