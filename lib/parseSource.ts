@@ -943,351 +943,23 @@ export function parseWesternCapeSchoolCalendarHtml(
 }
 
 /**
- * Parent-facing numbered rows from the English planning PDF (PDF wording).
- * Dates are read from each row’s due-date column — never hardcoded.
- * Month-only cells (e.g. #138 “May and June 2026”, #209 “August 2026”) are
- * dropped; no invented days. Skips CEMIS/sign-off/QMS/LTSM admin mush.
- * Does not invent absent items 102–117.
- */
-const WC_PLANNING_PARENT_ROWS: Array<{
-  item: number;
-  /** Must match the activity title for that numbered row. */
-  titleRe: RegExp;
-  summary: string;
-}> = [
-  {
-    item: 35,
-    titleRe: /School\s+admissions\s+open\s+for\s+Grades\s+R,\s*1\s+and\s+8/i,
-    summary: "School admissions open for Grades R, 1 and 8",
-  },
-  {
-    item: 119,
-    titleRe: /School\s+admissions\s+close\s+for\s+Grades\s+R,\s*1\s+and\s+8/i,
-    summary: "School admissions close for Grades R, 1 and 8",
-  },
-  {
-    item: 124,
-    titleRe:
-      /Parents\s+informed\s+of\s+the\s+outcome\s+of\s+online\s+admission\s+applications/i,
-    summary: "Parents informed of the outcome of online admission applications",
-  },
-  {
-    item: 125,
-    titleRe:
-      /Parents\s+confirm\s+acceptance\s+of\s+Grades\s+R,\s*1\s+and\s+8\s+placements/i,
-    summary: "Parents confirm acceptance of Grades R, 1 and 8 placements",
-  },
-  {
-    item: 194,
-    titleRe: /School\s+admissions\s+open\s+for\s+transfer\s+requests/i,
-    summary: "School admissions open for transfer requests",
-  },
-  {
-    item: 195,
-    titleRe: /School\s+admissions\s+close\s+for\s+transfer\s+requests/i,
-    summary: "School admissions close for transfer requests",
-  },
-  {
-    item: 200,
-    titleRe: /Parents\s+are\s+informed\s+of\s+the\s+outcome\s+per\s+email\/SMS/i,
-    summary: "Parents are informed of the outcome per email/SMS",
-  },
-  {
-    item: 201,
-    titleRe:
-      /Parents\s+confirm\s+acceptance\s+of\s+transfer\s+placements/i,
-    summary: "Parents confirm acceptance of transfer placements",
-  },
-  {
-    item: 36,
-    titleRe:
-      /Release\s+of\s+the\s+2025\s+National\s+Senior\s+Certificate\s+\(NSC\)\s+examination\s+results/i,
-    summary:
-      "Release of the 2025 National Senior Certificate (NSC) examination results",
-  },
-  {
-    item: 37,
-    titleRe:
-      /Submit\s+applications\s+for\s+NSC\s+examination\s+re-marks\s+and\s+rechecks/i,
-    summary: "Submit applications for NSC examination re-marks and rechecks",
-  },
-  {
-    item: 42,
-    titleRe:
-      /Closing\s+date\s+for\s+registrations\s+for\s+May\/June\s+2026\s+NSC\/Senior\s+Certificate\s+\(SC\)\s+examinations/i,
-    summary:
-      "Closing date for registrations for May/June 2026 NSC/Senior Certificate (SC) examinations",
-  },
-  {
-    item: 52,
-    titleRe:
-      /Closing\s+date\s+for\s+registrations\s+for\s+November\s+2026\s+NSC\s+examinations\s+[–—−-]\s*full-time\s+candidates/i,
-    summary:
-      "Closing date for registrations for November 2026 NSC examinations – full-time candidates",
-  },
-  {
-    item: 212,
-    titleRe:
-      /Grade\s+12\s+September\s+trial\s+examinations\s+earliest\s+start\s+date/i,
-    summary: "Grade 12 September trial examinations earliest start date",
-  },
-  {
-    item: 218,
-    titleRe: /Grade\s+12\s+September\s+trial\s+examinations\s+end\s+date/i,
-    summary: "Grade 12 September trial examinations end date",
-  },
-  {
-    item: 38,
-    titleRe:
-      /Closing\s+date\s+for\s+parents\s+to\s+appeal\s+the\s+progression\/promotion\s+results\s+of\s+their\s+children/i,
-    summary:
-      "Closing date for parents to appeal the progression/promotion results of their children",
-  },
-  {
-    item: 39,
-    titleRe:
-      /Principals\s+communicate\s+outcomes\s+of\s+progression\/promotion\s+appeals\s+to\s+parents\s+in\s+writing/i,
-    summary:
-      "Principals communicate outcomes of progression/promotion appeals to parents in writing",
-  },
-  {
-    item: 45,
-    titleRe:
-      /Closing\s+date\s+for\s+parents\s+dissatisfied\s+with\s+the\s+outcome\s+of\s+their\s+progression\/promotion\s+appeals,\s+to\s+appeal\s+to\s+district\s+directors/i,
-    summary:
-      "Closing date for parents dissatisfied with the outcome of their progression/promotion appeals, to appeal to district directors",
-  },
-  {
-    item: 41,
-    titleRe:
-      /Submit\s+assessment\s+accommodation\s+appeals\s+for\s+Grade\s+12/i,
-    summary: "Submit assessment accommodation appeals for Grade 12",
-  },
-  {
-    item: 47,
-    titleRe:
-      /All\s+appeals\s+\(for\s+progression\s+and\s+promotion\s+results\s+for\s+Grades\s+1[–—−-]11\s+of\s+2025\)\s+finalised/i,
-    summary:
-      "All appeals (for progression and promotion results for Grades 1–11 of 2025) finalised",
-  },
-  {
-    item: 58,
-    titleRe:
-      /Grade\s+11\s+subject\s+change\s+applications\s+by\s+parents/i,
-    summary: "Grade 11 subject change applications by parents",
-  },
-  {
-    item: 64,
-    titleRe:
-      /Election\s+of\s+Representative\s+Councils\s+of\s+Learners\s+\(RCLs\)/i,
-    summary: "Election of Representative Councils of Learners (RCLs)",
-  },
-  {
-    item: 65,
-    titleRe: /Induction\s+of\s+new\s+RCLs/i,
-    summary: "Induction of new RCLs",
-  },
-  {
-    item: 66,
-    titleRe:
-      /Election\s+of\s+RCL\s+office-bearers\s+and\s+governing\s+body\s+learner\s+representatives/i,
-    summary:
-      "Election of RCL office-bearers and governing body learner representatives",
-  },
-  {
-    item: 67,
-    titleRe:
-      /Election\s+of\s+District\s+and\s+Provincial\s+Council\s+of\s+Learners\s+Forums/i,
-    summary: "Election of District and Provincial Council of Learners Forums",
-  },
-  {
-    item: 68,
-    titleRe:
-      /South\s+African\s+Schools\s+Choral\s+Eisteddfod\s+\(SASCE\)\s*[–—−-]\s*registration/i,
-    summary:
-      "South African Schools Choral Eisteddfod (SASCE) – registration",
-  },
-  {
-    item: 69,
-    titleRe: /Safe\s+Schools\s+Holiday\s+Programme/i,
-    summary: "Safe Schools Holiday Programme",
-  },
-  {
-    // Later same-title holiday programmes — each numbered row keeps its own due dates
-    item: 157,
-    titleRe: /Safe\s+Schools\s+Holiday\s+Programme/i,
-    summary: "Safe Schools Holiday Programme",
-  },
-  {
-    item: 227,
-    titleRe: /Safe\s+Schools\s+Holiday\s+Programme/i,
-    summary: "Safe Schools Holiday Programme",
-  },
-  {
-    item: 289,
-    titleRe: /Safe\s+Schools\s+Holiday\s+Programme/i,
-    summary: "Safe Schools Holiday Programme",
-  },
-  {
-    item: 63,
-    titleRe: /Safe\s+Schools[''\u2019]\s+Back\s+to\s+School\s+Drive/i,
-    summary: "Safe Schools' Back to School Drive",
-  },
-  {
-    item: 123,
-    titleRe:
-      /System\s+displays\s+the\s+outcome\s+of\s+Grades\s+R,\s*1\s+and\s+8\s+online\s+admission\s+applications/i,
-    summary:
-      "System displays the outcome of Grades R, 1 and 8 online admission applications",
-  },
-  {
-    item: 145,
-    titleRe:
-      /Closing\s+date\s+for\s+applications\s+for\s+the\s+provincial\s+skills\s+competition/i,
-    summary: "Closing date for applications for the provincial skills competition",
-  },
-  {
-    item: 147,
-    titleRe:
-      /Grade\s+10\s+subject\s+change\s+applications\s+by\s+parents/i,
-    summary: "Grade 10 subject change applications by parents",
-  },
-  {
-    item: 149,
-    titleRe: /Schools\s+Democracy\s+Month/i,
-    summary: "Schools Democracy Month",
-  },
-  {
-    item: 150,
-    titleRe:
-      /National\s+Schools\s+MOOT\s+Court\s+\(Grades\s+9[–—−-]10\)\s*[–—−-]\s*registration/i,
-    summary: "National Schools MOOT Court (Grades 9–10) – registration",
-  },
-  {
-    item: 151,
-    titleRe:
-      /MOOT\s+Court\s*[–—−-]\s*workshop\s+on\s+essay\s+writing\s+\(virtual\)/i,
-    summary: "MOOT Court – workshop on essay writing (virtual)",
-  },
-  {
-    item: 152,
-    titleRe:
-      /Youth\s+Citizen\s+Action\s+Programme\s+\(YCAP\)\s*[–—−-]\s*registration/i,
-    summary: "Youth Citizen Action Programme (YCAP) – registration",
-  },
-  {
-    item: 153,
-    titleRe: /School\s+Safety\s+Summit/i,
-    summary: "School Safety Summit",
-  },
-  {
-    item: 154,
-    titleRe: /YCAP\s*[–—−-]\s*provincial\s+workshop\s+\(virtual\)/i,
-    summary: "YCAP – provincial workshop (virtual)",
-  },
-  {
-    item: 155,
-    titleRe: /RCL\s*[–—−-]\s*conference/i,
-    summary: "RCL – conference",
-  },
-  {
-    item: 156,
-    titleRe: /SASCE\s*[–—−-]\s*provincial\s+round/i,
-    summary: "SASCE – provincial round",
-  },
-  {
-    item: 158,
-    titleRe: /SASCE\s*[–—−-]\s*national\s+championship/i,
-    summary: "SASCE – national championship",
-  },
-  {
-    item: 199,
-    titleRe:
-      /System\s+displays\s+the\s+outcome\s+of\s+transfer\s+requests/i,
-    summary: "System displays the outcome of transfer requests",
-  },
-  {
-    item: 220,
-    titleRe:
-      /INkosi\s+Albert\s+Luthuli\s*[–—−-]\s*provincial\s+competition/i,
-    summary: "INkosi Albert Luthuli – provincial competition",
-  },
-  {
-    item: 221,
-    titleRe: /YCAP\s*[–—−-]\s*provincial\s+workshop\s+\(virtual\)/i,
-    summary: "YCAP – provincial workshop (virtual)",
-  },
-  {
-    item: 222,
-    titleRe:
-      /Heritage\s+Education\s+Schools\s+Outreach\s+Programme\s*[–—−-]\s*provincial\s+competition/i,
-    summary:
-      "Heritage Education Schools Outreach Programme – provincial competition",
-  },
-  {
-    item: 223,
-    titleRe: /School\s+Safety\s+Round\s+Table\s*[–—−-]\s*rural/i,
-    summary: "School Safety Round Table – rural",
-  },
-  {
-    item: 224,
-    titleRe: /School\s+Safety\s+Round\s+Table\s*[–—−-]\s*urban/i,
-    summary: "School Safety Round Table – urban",
-  },
-  {
-    item: 225,
-    titleRe:
-      /National\s+Schools\s+MOOT\s+Court\s+Competition\s*[–—−-]\s*provincial\s+oral\s+round/i,
-    summary:
-      "National Schools MOOT Court Competition – provincial oral round",
-  },
-  {
-    item: 226,
-    titleRe: /YCAP\s*[–—−-]\s*provincial\s+competition/i,
-    summary: "YCAP – provincial competition",
-  },
-  {
-    item: 238,
-    titleRe:
-      /Administration\s+of\s+WCED\s+Systemic\s+Tests\s+for\s+Grades\s+3,\s*6\s+and\s+9/i,
-    summary: "Administration of WCED Systemic Tests for Grades 3, 6 and 9",
-  },
-  {
-    item: 267,
-    titleRe:
-      /Applications\s+for\s+assessment\s+accommodations\s+for\s+Grades\s+R[–—−-]11\s+close/i,
-    summary: "Applications for assessment accommodations for Grades R–11 close",
-  },
-  {
-    item: 271,
-    titleRe:
-      /Submit\s+assessment\s+accommodations\s+appeals\s+for\s+Grades\s+10[–—−-]11/i,
-    summary: "Submit assessment accommodations appeals for Grades 10–11",
-  },
-  {
-    item: 280,
-    titleRe:
-      /Subject\s+change\s+applications\s+by\s+parents\s+of\s+Grade\s+11\s+learners/i,
-    summary:
-      "Subject change applications by parents of Grade 11 learners – for Grade 12 year",
-  },
-  {
-    item: 286,
-    titleRe: /Appeals\s+for\s+Grades\s+10[–—−-]11/i,
-    summary: "Appeals for Grades 10–11",
-  },
-];
-
-/**
  * Slice text for numbered activity `N.` through the next activity / section.
+ * Uses the last `N.` marker when pdf-parse duplicates early pages.
  * Stops at the next item marker even when pdftotext glues it on the same line
  * (so #43’s date cannot land inside #42’s block).
  */
 function numberedActivityBlock(text: string, item: number): string | null {
-  const startRe = new RegExp(String.raw`(^|\n)\s*${item}\.\s+`, "m");
-  const sm = startRe.exec(text);
-  if (!sm) return null;
-  const start = sm.index + sm[0].length;
+  const startRe = new RegExp(String.raw`(^|\n)\s*${item}\.\s+`, "gm");
+  let sm: RegExpExecArray | null;
+  let last: RegExpExecArray | null = null;
+  while ((sm = startRe.exec(text)) !== null) {
+    const after = text.slice(sm.index + sm[0].length, sm.index + sm[0].length + 40);
+    if (/^Important dates/i.test(after)) continue;
+    if (/^Introduction/i.test(after)) continue;
+    last = sm;
+  }
+  if (!last) return null;
+  const start = last.index + last[0].length;
   const rest = text.slice(start);
 
   /** Index of the digit that starts the next `N.` marker, or null. */
@@ -1323,27 +995,18 @@ function numberedActivityBlock(text: string, item: number): string | null {
   return rest.slice(0, end);
 }
 
-/**
- * Parse due-date column bounds from an activity block.
- * Prefers the first due-date cell after the title (not the last date in a
- * leaked blob — e.g. #43’s 29 Jan must not override #42’s 27 Jan).
- * Returns null for empty cells, TBC, month-only ("May and June 2026"), etc.
- */
-function parsePlanningDueDate(
-  block: string
-): { start: Date; end: Date } | null {
-  const flat = block.replace(/\s+/g, " ").trim();
-  if (!flat) return null;
-  if (
-    /to\s+be\s+confirmed|^\s*ongoing\b/i.test(flat) &&
-    !/\d{1,2}\s+\w+\s+20\d{2}/i.test(flat)
-  ) {
-    return null;
-  }
+type PlanningDueHit = { index: number; length: number; start: Date; end: Date };
 
-  // Find the earliest due-date expression in the cell (title comes first in PDF).
-  type Hit = { index: number; start: Date; end: Date };
-  const hits: Hit[] = [];
+/**
+ * All day-dated due expressions in a block, in source order.
+ * Range hits absorb inner single-day matches so "13 to 27 January" is one cell.
+ */
+function parsePlanningDueDates(block: string): PlanningDueHit[] {
+  const flat = block.replace(/\s+/g, " ").trim();
+  if (!flat) return [];
+
+  const hits: PlanningDueHit[] = [];
+  const ranges: Array<{ index: number; end: number }> = [];
 
   const crossRe = new RegExp(
     String.raw`(\d{1,2})\s+(${MONTH_ALT})\s*(?:to|[–—−-])\s*(\d{1,2})\s+(${MONTH_ALT})\s+(20\d{2})\b`,
@@ -1357,7 +1020,10 @@ function parsePlanningDueDate(
     if (m1 == null || m2 == null) continue;
     const start = parseDateParts(Number(m[1]), m1, y);
     const end = parseDateParts(Number(m[3]), m2, y);
-    if (start && end) hits.push({ index: m.index, start, end });
+    if (start && end) {
+      hits.push({ index: m.index, length: m[0].length, start, end });
+      ranges.push({ index: m.index, end: m.index + m[0].length });
+    }
   }
 
   const sameRe = new RegExp(
@@ -1370,7 +1036,10 @@ function parsePlanningDueDate(
     if (month == null) continue;
     const start = parseDateParts(Number(m[1]), month, y);
     const end = parseDateParts(Number(m[2]), month, y);
-    if (start && end) hits.push({ index: m.index, start, end });
+    if (start && end) {
+      hits.push({ index: m.index, length: m[0].length, start, end });
+      ranges.push({ index: m.index, end: m.index + m[0].length });
+    }
   }
 
   const dayRe = new RegExp(
@@ -1378,16 +1047,214 @@ function parsePlanningDueDate(
     "gi"
   );
   while ((m = dayRe.exec(flat)) !== null) {
+    if (ranges.some((r) => m!.index >= r.index && m!.index < r.end)) continue;
     const month = MONTHS[m[2].toLowerCase()];
     if (month == null) continue;
     const day = parseDateParts(Number(m[1]), month, Number(m[3]));
-    if (day) hits.push({ index: m.index, start: day, end: day });
+    if (day) {
+      hits.push({
+        index: m.index,
+        length: m[0].length,
+        start: day,
+        end: day,
+      });
+    }
   }
 
-  if (!hits.length) return null;
   hits.sort((a, b) => a.index - b.index);
-  // Prefer the earliest due-date cell (title/date column), not a later leaked date.
-  return { start: hits[0].start, end: hits[0].end };
+  return hits;
+}
+
+/**
+ * Choose the due-date column when a block has several day expressions.
+ * - Default: earliest hit (stops a leaked next-row day, e.g. #43 into #42).
+ * - Period-in-title: when the first hit sits mid-sentence and a later hit is
+ *   the trailing due-date cell (e.g. WCED 043 “period 01 Apr–30 Jun … 31 Jul”),
+ *   use the last hit.
+ */
+function pickPlanningDueHit(
+  hits: PlanningDueHit[],
+  flat: string
+): PlanningDueHit | null {
+  if (!hits.length) return null;
+  if (hits.length === 1) return hits[0];
+  const first = hits[0];
+  const last = hits[hits.length - 1];
+  const between = flat
+    .slice(first.index + first.length, last.index)
+    .replace(/\s+/g, " ")
+    .trim();
+  const afterLast = flat
+    .slice(last.index + last.length)
+    .replace(/\s+/g, " ")
+    .trim();
+  // Title continues after the first date ("… to district offices 31 July 2026")
+  // Require the trailing due cell to be at the end of the block — not a later
+  // "by 30 November 2025" clause after page-break leftovers (#7).
+  if (between.length > 8 && afterLast.length < 8) return last;
+  return first;
+}
+
+/**
+ * Parse due-date column bounds from an activity block.
+ * Prefers the due-date cell (see pickPlanningDueHit) — not a leaked next-row
+ * day, and not a period buried in the activity title.
+ * Returns null for empty cells, TBC, month-only ("May and June 2026"), etc.
+ */
+function parsePlanningDueDate(
+  block: string
+): { start: Date; end: Date } | null {
+  const flat = block.replace(/\s+/g, " ").trim();
+  if (!flat) return null;
+  if (
+    /to\s+be\s+confirmed|^\s*ongoing\b/i.test(flat) &&
+    !/\d{1,2}\s+\w+\s+20\d{2}/i.test(flat)
+  ) {
+    return null;
+  }
+  const hits = parsePlanningDueDates(block);
+  const hit = pickPlanningDueHit(hits, flat);
+  if (!hit) return null;
+  return { start: hit.start, end: hit.end };
+}
+
+/** True when the due-date cell is explicitly non-day (not an empty stack slot). */
+function planningDueCellIsNonDay(block: string): boolean {
+  const flat = block.replace(/\s+/g, " ").trim();
+  if (!flat) return false;
+  if (/\bOngoing\b/i.test(flat)) return true;
+  if (/to\s+be\s+confirmed/i.test(flat)) return true;
+  if (/\bAs per\b/i.test(flat)) return true;
+  if (/\bBefore\b/i.test(flat)) return true;
+  if (/\buntil\s+placement\b/i.test(flat)) return true;
+  if (/1\s*st\s+day\s+of\s+school/i.test(flat)) return true;
+  if (
+    new RegExp(
+      String.raw`(?:^|[^0-9])(${MONTH_ALT})\s+to\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+      "i"
+    ).test(flat)
+  ) {
+    return true;
+  }
+  if (
+    new RegExp(
+      String.raw`(?:^|[^0-9])(${MONTH_ALT})\s+and\s+(${MONTH_ALT})\s+(20\d{2})\b`,
+      "i"
+    ).test(flat)
+  ) {
+    return true;
+  }
+  // Month + year with no day (e.g. "August 2026", "February 2026")
+  if (
+    new RegExp(
+      String.raw`(?:^|[^0-9])(${MONTH_ALT})\s+(20\d{2})\b`,
+      "i"
+    ).test(flat) &&
+    !parsePlanningDueDates(block).length
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Activity title from a numbered block (PDF wording before the due-date cell). */
+function planningActivityTitle(block: string): string {
+  const flat = block
+    .replace(/\b2026 SCHOOL PLANNING CALENDAR\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!flat) return "";
+  // Always cut at the earliest day-date token so stacked due dates never leak
+  // into the summary (e.g. #168 after redistributing #166–#168).
+  const hits = parsePlanningDueDates(flat);
+  if (hits.length && hits[0].index > 0) {
+    return flat
+      .slice(0, hits[0].index)
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160);
+  }
+  const cutRe = new RegExp(
+    String.raw`(?:\bOngoing\b|\bTo be confirmed\b|\bBefore\b|\bAs per\b|(?:^|[^0-9/])(${MONTH_ALT})\s+and\s+(${MONTH_ALT})\s+(20\d{2})\b|(?:^|[^0-9/])(${MONTH_ALT})\s+to\s+(${MONTH_ALT})\s+(20\d{2})\b|(?:^|[^0-9/])(${MONTH_ALT})\s+(20\d{2})\b)`,
+    "i"
+  );
+  const m = cutRe.exec(flat);
+  let title = (m && m.index > 0 ? flat.slice(0, m.index) : flat).trim();
+  title = title.replace(/\s+\d{1,2}\s*$/, "").trim();
+  return title.replace(/\s+/g, " ").slice(0, 160);
+}
+
+/**
+ * Collect every readable numbered activity row (last occurrence per item no.).
+ * Does not invent absent items 102–117.
+ */
+function collectWesternCapePlanningActivities(text: string): Array<{
+  item: number;
+  block: string;
+  title: string;
+  dates: PlanningDueHit[];
+  kind: "dated" | "empty" | "skip";
+}> {
+  const found = new Map<number, string>();
+  // Probe a wide range; missing numbers (102–117) simply stay absent.
+  for (let n = 1; n <= 400; n++) {
+    const block = numberedActivityBlock(text, n);
+    if (block == null) continue;
+    found.set(n, block);
+  }
+  const items = [...found.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([item, block]) => {
+      const dates = parsePlanningDueDates(block);
+      let kind: "dated" | "empty" | "skip";
+      if (dates.length) kind = "dated";
+      else if (planningDueCellIsNonDay(block)) kind = "skip";
+      else kind = "empty";
+      return {
+        item,
+        block,
+        title: planningActivityTitle(block),
+        dates,
+        kind,
+      };
+    });
+
+  // pdf-parse stacks due dates after a run of short titles. Redistribute when
+  // N consecutive empty/dated siblings end with N date cells on the last row.
+  for (let i = 0; i < items.length; i++) {
+    const cur = items[i];
+    if (cur.kind !== "dated" || cur.dates.length <= 1) continue;
+    let start = i;
+    while (
+      start > 0 &&
+      items[start - 1].kind === "empty" &&
+      items[start - 1].item === items[start].item - 1
+    ) {
+      start--;
+    }
+    const groupLen = i - start + 1;
+    const dates = cur.dates;
+    if (groupLen === dates.length && groupLen > 1) {
+      for (let j = 0; j < groupLen; j++) {
+        items[start + j].dates = [dates[j]];
+        items[start + j].kind = "dated";
+      }
+    } else if (groupLen === 1) {
+      // One row with several day cells: pick the due-date column (period-in-title
+      // → last; leaked neighbour day → first). Do not span adjacent singles —
+      // that turns #42’s 27 Jan + leaked 29 Jan into a false 27–29 window.
+      const flat = cur.block.replace(/\s+/g, " ").trim();
+      const hit = pickPlanningDueHit(dates, flat);
+      cur.dates = hit ? [hit] : [dates[0]];
+    } else {
+      // Mismatch: keep the due-date cell for this row only (never invent for neighbours)
+      const flat = cur.block.replace(/\s+/g, " ").trim();
+      const hit = pickPlanningDueHit(dates, flat);
+      cur.dates = hit ? [hit] : [dates[0]];
+    }
+  }
+
+  return items;
 }
 
 /**
@@ -1666,9 +1533,10 @@ export function parseWesternCapeNovNscRegFormPdf(text: string): ParsedEvent[] {
 }
 
 /**
- * English WCED planning PDF: religious observances + curated parent-facing
- * admission/NSC rows (PDF wording). Untitled CEMIS/sign-off/QMS/LTSM admin mush
- * is dropped. Grade 12 / NSC exam nav URLs are parsed separately.
+ * English WCED planning PDF: religious observances + every readable numbered
+ * day-dated activity row (PDF wording). Month-only / TBC / Ongoing / undated
+ * cells are dropped — no invented days. Absent items 102–117 are not invented.
+ * Grade 12 / NSC exam nav URLs are parsed separately.
  */
 export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
   const cleaned = text.replace(/\u00a0/g, " ");
@@ -1744,14 +1612,11 @@ export function parseWesternCapePlanningPdf(text: string): ParsedEvent[] {
     for (const d of dates) push(name, d);
   }
 
-  // Curated parent-facing rows: title match + due-date parsed from that numbered row
-  for (const row of WC_PLANNING_PARENT_ROWS) {
-    const block = numberedActivityBlock(cleaned, row.item);
-    if (!block) continue;
-    if (!row.titleRe.test(block.replace(/\s+/g, " "))) continue;
-    const bounds = parsePlanningDueDate(block);
-    if (!bounds) continue; // empty / TBC / month-only — drop, do not invent days
-    push(row.summary, bounds.start, bounds.end);
+  // Full numbered day-dated list (not a parent-only slice)
+  for (const row of collectWesternCapePlanningActivities(cleaned)) {
+    if (row.kind !== "dated" || row.dates.length !== 1) continue;
+    if (!row.title) continue;
+    push(row.title, row.dates[0].start, row.dates[0].end);
   }
 
   return events;
